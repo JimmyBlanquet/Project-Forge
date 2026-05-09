@@ -1,0 +1,27 @@
+{
+  "extends": [
+    "next/core-web-vitals",
+    "plugin:sonarjs/recommended-legacy"
+  ],
+  "plugins": ["sonarjs"],
+  "rules": {
+    "sonarjs/cognitive-complexity": ["warn", 15],
+    "sonarjs/no-duplicate-string": ["warn", { "threshold": 5 }],
+    "no-restricted-imports": ["error", {
+      "patterns": [
+        {
+          "group": ["@/utils/db/*", "drizzle-orm", "drizzle-orm/*"],
+          "message": "DB access is forbidden in components. Use API routes or server actions."
+        }
+      ]
+    }]
+  },
+  "overrides": [
+    {
+      "files": ["app/api/**/*.ts", "utils/**/*.ts", "lib/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    }
+  ]
+}

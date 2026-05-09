@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+#
+# deploy-staging — Push branch and retrieve Vercel preview URL
+# Pushes current branch to origin and polls for Vercel preview deployment.
+#
+# Usage:
+#   ./tools/deploy-staging [options]
+#
+# Options:
+#   --timeout <secs>    Max wait time for deployment (default: 300)
+#   --dir <path>        Project directory (default: current dir)
+#   -h, --help          Show this help
+
+set -euo pipefail
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+info()    { echo -e "${BLUE}[deploy]${NC}  $*"; }
+success() { echo -e "${GREEN}[deploy]${NC}  $*"; }
+warn()    { echo -e "${YELLOW}[deploy]${NC}  $*"; }
+error()   { echo -e "${RED}[deploy]${NC}  $*" >&2; }
+die()     { error "$@"; exit 1; }
+
+TIMEOUT=300
+PROJECT_DIR="."
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --timeout) TIMEOUT="$2"; shift 2 ;;
+        --dir)     PROJECT_DIR="$2"; shift 2 ;;
+        -h|--help)
+            echo "Usage: $(basename "$0") [--timeout <secs>] [--dir <path>]"
+            echo "Push branch and retrieve Vercel preview URL."
+            exit 0 ;;
+        *) die "Unknown option: $1" ;;
+    esac
+done
+
+cd "$PROJECT_DIR"
+
+# Verify prerequisites
+command -v git &>/dev/null || die "git not found"
+command -v vercel &>/dev/null || die "Vercel CLI not found. Install: npm i -g vercel"
+
+BRANCH=$(git branch --show-current)
+[ -n "$BRANCH" ] || die "Not on a branch (detached HEAD?)"
+[ "$BRANCH" != "main" ] || die "Cannot deploy-staging from main. Use a feature branch."
+
+# Push branch
+info "Pushing ${BOLD}${BRANCH}${NC} to origin..."
+if ! git push -u origin "$BRANCH" 2>/dev/null; then
+    die "Could not push branch. Check remote and auth."
+fi
+success "Branch pushed."
+
+# Poll for Vercel preview deployment
+info "Waiting for Vercel preview deployment (timeout: ${TIMEOUT}s)..."
+
+ELAPSED=0
+INTERVAL=10
+DEPLOY_URL=""
+
+while [[ $ELAPSED -lt $TIMEOUT ]]; do
+    # Try to get the latest deployment URL for this branch
+    DEPLOY_URL=$(vercel ls --json 2>/dev/null | jq -r --arg branch "$BRANCH" '
+        [.deployments[] | select(.meta.githubCommitRef == $branch and .state == "READY")] |
+        sort_by(.created) | last | .url // empty
+    ' 2>/dev/null || true)
+
+    if [ -n "$DEPLOY_URL" ]; then
+        echo ""
+        success "Preview deployment ready!"
+        success "URL: ${BOLD}https://${DEPLOY_URL}${NC}"
+        echo "https://${DEPLOY_URL}" > .staging-url
+        info "Saved to .staging-url"
+        exit 0
+    fi
+
+    # Check if there's a deployment in progress
+    building=$(vercel ls --json 2>/dev/null | jq -r --arg branch "$BRANCH" '
+        [.deployments[] | select(.meta.githubCommitRef == $branch and (.state == "BUILDING" or .state == "QUEUED"))] | length
+    ' 2>/dev/null || echo "0")
+
+    if [[ "$building" -gt 0 ]]; then
+        printf "\r  Building... (%ds elapsed)" "$ELAPSED"
+    else
+        printf "\r  Waiting for deployment... (%ds elapsed)" "$ELAPSED"
+    fi
+
+    sleep "$INTERVAL"
+    ELAPSED=$((ELAPSED + INTERVAL))
+done
+
+echo ""
+error "No preview deployment after ${TIMEOUT}s"
+warn "Check Vercel dashboard or run: vercel ls"
+exit 1

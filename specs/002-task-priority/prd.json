@@ -1,0 +1,218 @@
+{
+  "project": "task-priority-system",
+  "branchName": "002-task-priority",
+  "description": "Add priority field (HIGH/MEDIUM/LOW) to tasks with filtering and sorting capabilities",
+  "userStories": [
+    {
+      "id": "US-001-1",
+      "parentStory": "US-001",
+      "title": "Priority Type Definitions",
+      "description": "Create TypeScript types and interfaces for task priority field",
+      "acceptanceCriteria": [
+        "TaskPriority type defined as 'HIGH' | 'MEDIUM' | 'LOW'",
+        "Task interface updated with priority field",
+        "Typecheck passes with no errors"
+      ],
+      "priority": 1,
+      "passes": false,
+      "dependencies": [],
+      "filesAffected": ["src/types/task.ts"],
+      "notes": "Foundation layer - must complete before service updates",
+      "taskIds": ["T007"]
+    },
+    {
+      "id": "US-001-2",
+      "parentStory": "US-001",
+      "title": "Priority Service Logic",
+      "description": "Update task service to handle priority in create and update operations",
+      "acceptanceCriteria": [
+        "taskService.create accepts and stores priority",
+        "taskService.update allows priority changes",
+        "Priority defaults to MEDIUM if not specified",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "dependencies": ["US-001-1"],
+      "filesAffected": ["src/lib/services/taskService.ts"],
+      "notes": "Service layer - backend logic for priority handling",
+      "taskIds": ["T008", "T009"]
+    },
+    {
+      "id": "US-001-3",
+      "parentStory": "US-001",
+      "title": "Priority UI Components",
+      "description": "Create reusable PriorityBadge and PrioritySelector components",
+      "acceptanceCriteria": [
+        "PriorityBadge component renders with color coding (red/yellow/blue)",
+        "PriorityBadge has aria-labels for accessibility",
+        "PrioritySelector dropdown shows HIGH/MEDIUM/LOW options",
+        "PrioritySelector defaults to MEDIUM",
+        "Typecheck passes",
+        "Components render correctly in isolation"
+      ],
+      "priority": 3,
+      "passes": false,
+      "dependencies": ["US-001-1"],
+      "filesAffected": [
+        "src/components/tasks/PriorityBadge.tsx",
+        "src/components/tasks/PrioritySelector.tsx"
+      ],
+      "notes": "Reusable components - can be built in parallel with service layer",
+      "taskIds": ["T010", "T011"]
+    },
+    {
+      "id": "US-001-4",
+      "parentStory": "US-001",
+      "title": "Priority Component Integration",
+      "description": "Integrate priority components into TaskForm and TaskCard",
+      "acceptanceCriteria": [
+        "PrioritySelector added to TaskForm (create/edit)",
+        "PriorityBadge added to TaskCard display",
+        "Form validation includes priority",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "dependencies": ["US-001-2", "US-001-3"],
+      "filesAffected": [
+        "src/components/tasks/TaskForm.tsx",
+        "src/components/tasks/TaskCard.tsx"
+      ],
+      "notes": "Integration layer - requires both service and components ready",
+      "taskIds": ["T012", "T013"]
+    },
+    {
+      "id": "US-001-5",
+      "parentStory": "US-001",
+      "title": "Priority API Endpoints & Browser Verification",
+      "description": "Update API endpoints to accept priority and verify complete flow in browser",
+      "acceptanceCriteria": [
+        "POST /api/tasks accepts priority in request body",
+        "PATCH /api/tasks/[id] allows priority updates",
+        "API validation rejects invalid priority values",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill: create task with priority, edit priority, view priority badge"
+      ],
+      "priority": 5,
+      "passes": false,
+      "dependencies": ["US-001-4"],
+      "filesAffected": [
+        "src/app/api/tasks/route.ts",
+        "src/app/api/tasks/[id]/route.ts"
+      ],
+      "notes": "Final integration - end-to-end verification required",
+      "taskIds": ["T014", "T015", "T016"]
+    },
+    {
+      "id": "US-002-1",
+      "parentStory": "US-002",
+      "title": "Priority Filter Backend",
+      "description": "Implement server-side priority filtering in API and service layer",
+      "acceptanceCriteria": [
+        "GET /api/tasks accepts priority query parameter",
+        "taskService.list filters by priority when specified",
+        "Query returns only tasks matching priority",
+        "Typecheck passes"
+      ],
+      "priority": 6,
+      "passes": false,
+      "dependencies": ["US-001-5"],
+      "filesAffected": [
+        "src/app/api/tasks/route.ts",
+        "src/lib/services/taskService.ts"
+      ],
+      "notes": "Backend filtering logic",
+      "taskIds": ["T018", "T019"]
+    },
+    {
+      "id": "US-002-2",
+      "parentStory": "US-002",
+      "title": "Priority Filter UI & Verification",
+      "description": "Add priority filter to UI and verify filtering works end-to-end",
+      "acceptanceCriteria": [
+        "Priority filter dropdown added to TaskFilters component",
+        "Filter state managed in tasks page",
+        "Selecting priority updates task list",
+        "Filter persists across page reloads",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill: apply priority filter, verify only matching tasks shown"
+      ],
+      "priority": 7,
+      "passes": false,
+      "dependencies": ["US-002-1"],
+      "filesAffected": [
+        "src/components/tasks/TaskFilters.tsx",
+        "src/app/tasks/page.tsx"
+      ],
+      "notes": "Frontend filtering with browser verification",
+      "taskIds": ["T017", "T020", "T021"]
+    },
+    {
+      "id": "US-003-1",
+      "parentStory": "US-003",
+      "title": "Priority Sort Backend",
+      "description": "Implement server-side priority sorting in API and service layer",
+      "acceptanceCriteria": [
+        "GET /api/tasks accepts sortBy=priority parameter",
+        "taskService.list sorts by priority when specified",
+        "Sort order: HIGH → MEDIUM → LOW",
+        "Typecheck passes"
+      ],
+      "priority": 8,
+      "passes": false,
+      "dependencies": ["US-002-2"],
+      "filesAffected": [
+        "src/app/api/tasks/route.ts",
+        "src/lib/services/taskService.ts"
+      ],
+      "notes": "Backend sorting logic",
+      "taskIds": ["T023", "T024"]
+    },
+    {
+      "id": "US-003-2",
+      "parentStory": "US-003",
+      "title": "Priority Sort UI & Verification",
+      "description": "Add priority sort to UI and verify sorting works end-to-end",
+      "acceptanceCriteria": [
+        "Priority sort option added to TaskSort component",
+        "Sort state managed in tasks page",
+        "Tasks display in correct priority order",
+        "Sort preference saved in user settings",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill: apply priority sort, verify HIGH tasks appear first"
+      ],
+      "priority": 9,
+      "passes": false,
+      "dependencies": ["US-003-1"],
+      "filesAffected": [
+        "src/components/tasks/TaskSort.tsx",
+        "src/app/tasks/page.tsx"
+      ],
+      "notes": "Frontend sorting with browser verification",
+      "taskIds": ["T022", "T025", "T026"]
+    }
+  ],
+  "metadata": {
+    "createdAt": "2026-01-18T15:15:00.000Z",
+    "source": "speckit",
+    "specPath": "specs/002-task-priority/spec.md",
+    "planPath": "specs/002-task-priority/plan.md",
+    "tasksPath": "specs/002-task-priority/tasks.md",
+    "totalSubStories": 9,
+    "estimatedHours": 10,
+    "groupingStrategy": {
+      "types_layer": 1,
+      "service_layer": 3,
+      "ui_components": 1,
+      "integration_layer": 1,
+      "api_layer": 2,
+      "verification": 1
+    },
+    "dependencyChain": {
+      "longest_path": 9,
+      "parallel_opportunities": 2,
+      "independent_starts": 1
+    }
+  }
+}

@@ -1,0 +1,50 @@
+name: database-neon
+version: 1.0.0
+description: Neon serverless PostgreSQL with Prisma ORM for type-safe database access
+tier: 1
+tags:
+  - database
+  - neon
+  - postgresql
+  - prisma
+  - orm
+  - serverless
+
+source_project: starters/saas-base
+validated: true
+production_ready: true
+
+tech_stack:
+  - "@prisma/client@^5.17.0"
+  - "prisma@^5.17.0"
+  - neon (PostgreSQL)
+
+features:
+  - Neon serverless PostgreSQL connection
+  - Prisma ORM with type-safe queries
+  - Database migrations
+  - Prisma Studio for database management
+  - Connection pooling with singleton pattern
+  - Scale to zero cost savings
+
+dependencies:
+  required: []
+  optional: []
+
+prerequisites:
+  - Neon account created
+  - Database project created
+  - Connection string obtained
+
+usage_example: |
+  import { prisma } from "@/lib/db"
+
+  const user = await prisma.user.findUnique({
+    where: { id: "123" }
+  })
+
+quality_gates:
+  - Prisma client generates without errors
+  - Database connection works
+  - Migrations apply successfully
+  - TypeScript types are correct

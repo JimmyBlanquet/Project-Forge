@@ -1,0 +1,105 @@
+name: rate-limiting-persistent
+version: 1.0.0
+description: Persistent rate limiting with Supabase storage and in-memory fallback for serverless environments
+category: core
+tier: 1
+author: Project Forge
+tags:
+  - rate-limiting
+  - supabase
+  - performance
+  - scalability
+  - production-ready
+  - serverless
+dependencies:
+  next: latest
+  "@/lib": latest
+exports:
+  - name: checkClassificationRateLimit
+    type: function
+    description: |-
+      Check rate limit for classification requests
+      Limit: 30 requests per minute per user (3x generation limit)
+  - name: cleanupExpiredEntries
+    type: function
+    description: Clean up expired entries periodically
+  - name: RateLimitResult
+    type: interface
+  - name: checkGenerationRateLimit
+    type: function
+    description: |-
+      Check rate limit for generation requests
+      Limit: 10 requests per minute per user
+  - name: cleanupExpiredEntries
+    type: function
+    description: Clean up expired entries periodically
+  - name: RateLimitResult
+    type: interface
+  - name: rateLimitExceededResponse
+    type: function
+    description: Crée une réponse 429 Too Many Requests avec headers appropriés
+  - name: withRateLimit
+    type: function
+    description: Applique le rate limiting et retourne une réponse 429 si dépassé
+  - name: getRateLimitHeaders
+    type: function
+    description: Headers de rate limit à ajouter aux réponses réussies
+  - name: checkRateLimit
+    type: function
+    description: Check rate limit using Supabase persistent storage
+  - name: checkGenerationRateLimit
+    type: function
+    description: |-
+      Rate limit for content generation (AI)
+      10 requests per minute
+  - name: checkClassificationRateLimit
+    type: function
+    description: |-
+      Rate limit for email classification
+      30 requests per minute (higher as it's read-only)
+  - name: checkSuggestionRateLimit
+    type: function
+    description: |-
+      Rate limit for suggestion generation
+      20 requests per minute
+  - name: checkLeadExtractionRateLimit
+    type: function
+    description: |-
+      Rate limit for lead profile extraction (AI)
+      5 requests per minute (very expensive operation)
+  - name: checkLeadScoringRateLimit
+    type: function
+    description: |-
+      Rate limit for lead scoring (AI)
+      15 requests per minute (moderately expensive)
+  - name: checkLeadCrudRateLimit
+    type: function
+    description: |-
+      Rate limit for lead CRUD operations
+      60 requests per minute
+  - name: checkEmailCrudRateLimit
+    type: function
+    description: |-
+      Rate limit for email CRUD operations
+      100 requests per minute (higher as emails are frequently accessed)
+  - name: cleanupFallbackStore
+    type: function
+    description: Cleanup expired entries in fallback store
+  - name: RateLimitResult
+    type: interface
+  - name: RateLimitConfig
+    type: interface
+usage:
+  install:
+    - npm install @project-forge/skills
+    - // or copy to production-skills/core/rate-limiting-persistent/
+  example: |-
+    import { checkClassificationRateLimit } from '@project-forge/skills/rate-limiting-persistent'
+
+    // Use the checkClassificationRateLimit function
+    const result = await checkClassificationRateLimit(...)
+files:
+  - src/**/*
+  - README.md
+  - manifest.yaml
+lastUpdated: 2026-01-16T18:45:13.500Z

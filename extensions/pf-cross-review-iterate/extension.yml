@@ -1,0 +1,19 @@
+schema_version: "1.0"
+
+extension:
+  id: "pf-cross-review-iterate"
+  name: "Project-Forge Cross-Review Iterate (V4 — auto-stabilization loop)"
+  version: "1.0.0"
+  description: "Wrap /pf-cross-review V3.3 in an iterative stabilization loop. Detects convergence via finding fingerprints (sha256 file:line + claim normalisé). Stops on saturation (K rounds without new findings), divergence (>1.5× new vs prev = spec drift alarm), max iterations (5), or budget cap. Implements SCAFFOLD-CEGIS safety monotonicity pattern."
+  author: "Project-Forge"
+  repository: "https://github.com/JimmyBlanquet/project-forge"
+  license: "MIT"
+
+requires:
+  speckit_version: ">=0.3.2"
+
+provides:
+  commands:
+    - name: "speckit.pf-cross-review-iterate.iterate"
+      file: "commands/iterate.md"
+      description: "Run /pf-cross-review iteratively until convergence, divergence, or hard cap"

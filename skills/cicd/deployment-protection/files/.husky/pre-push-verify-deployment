@@ -1,0 +1,77 @@
+#!/usr/bin/env sh
+# Pre-push hook: Vérifie que le déploiement staging est à jour
+# Économise 2h+ de debugging sur mauvaise version
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Detect if pushing to staging
+while read local_ref local_sha remote_ref remote_sha; do
+  if [ "$remote_ref" = "refs/heads/staging" ]; then
+    PUSHING_TO_STAGING=1
+    LATEST_COMMIT=$local_sha
+  fi
+done
+
+# Skip if not pushing to staging
+if [ -z "$PUSHING_TO_STAGING" ]; then
+  exit 0
+fi
+
+echo ""
+echo "🔍 Verifying Vercel deployment before push to staging..."
+echo ""
+
+# Check if VERCEL_TOKEN is set
+if [ -z "$VERCEL_TOKEN" ]; then
+  echo "${YELLOW}⚠️  WARNING: VERCEL_TOKEN not set${NC}"
+  echo ""
+  echo "Cannot verify deployment without Vercel token."
+  echo ""
+  echo "Options:"
+  echo "  1. Set VERCEL_TOKEN environment variable"
+  echo "  2. Skip verification: git push --no-verify"
+  echo ""
+  echo "To get token: https://vercel.com/account/tokens"
+  echo ""
+  exit 1
+fi
+
+# Run verification script
+if bash scripts/verify-deployment.sh staging; then
+  echo ""
+  echo "${GREEN}✅ Deployment verification passed${NC}"
+  echo "Safe to push to staging"
+  echo ""
+  exit 0
+else
+  EXIT_CODE=$?
+  echo ""
+  echo "${RED}❌ Deployment verification FAILED${NC}"
+  echo ""
+
+  if [ $EXIT_CODE -eq 2 ]; then
+    # Alias is stale
+    echo "The git-staging alias is pointing to an OLD deployment."
+    echo ""
+    echo "⚠️  If you push now, you won't be able to test your changes!"
+    echo ""
+    echo "Options:"
+    echo "  1. Wait for current build to finish, then push"
+    echo "  2. Fix alias manually:"
+    echo "     vercel alias set <latest-deployment> <git-staging-url>"
+    echo "  3. Skip check: git push --no-verify (NOT RECOMMENDED)"
+    echo ""
+    exit 1
+  else
+    # Other error
+    echo "Verification script failed. Check output above."
+    echo ""
+    echo "To skip: git push --no-verify"
+    echo ""
+    exit 1
+  fi
+fi

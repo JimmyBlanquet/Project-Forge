@@ -1,0 +1,182 @@
+#!/usr/bin/env bash
+#
+# Install a Project-Forge skill into any project.
+# Inlines the skill content into .claude/commands/ for portability.
+#
+# Usage:
+#   ./tools/install-skill <skill-command> <target-project>
+#   ./tools/install-skill speckit-audit-sdlc ~/Projets/mon-app
+#   ./tools/install-skill --list
+#
+# The target project does NOT need to be a Project-Forge project.
+
+set -euo pipefail
+
+FORGE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+info()    { echo -e "${BLUE}[install]${NC} $*"; }
+success() { echo -e "${GREEN}[install]${NC} $*"; }
+error()   { echo -e "${RED}[install]${NC} $*" >&2; }
+die()     { error "$@"; exit 1; }
+
+# ---------------------------------------------------------------------------
+# List available skills
+# ---------------------------------------------------------------------------
+list_skills() {
+    echo -e "${BOLD}Available skills:${NC}"
+    echo ""
+    for cmd_file in "$FORGE_ROOT"/commands/*.md; do
+        [ -f "$cmd_file" ] || continue
+        local name desc
+        name=$(basename "$cmd_file" .md)
+        desc=$(sed -n 's/^description: *//p' "$cmd_file" | head -1)
+        printf "  ${BOLD}%-30s${NC} %s\n" "$name" "$desc"
+    done
+}
+
+# ---------------------------------------------------------------------------
+# Install one skill
+# ---------------------------------------------------------------------------
+install_skill() {
+    local skill_name="$1"
+    local target_dir="$2"
+
+    # Resolve target
+    target_dir=$(realpath "$target_dir")
+    [[ -d "$target_dir" ]] || die "Target directory not found: $target_dir"
+
+    # Find command stub
+    local cmd_file="$FORGE_ROOT/commands/${skill_name}.md"
+    [[ -f "$cmd_file" ]] || die "Skill not found: $skill_name (run --list to see available skills)"
+
+    # Extract description from stub
+    local description
+    description=$(sed -n 's/^description: *//p' "$cmd_file" | head -1)
+
+    # Check if it references a skill file
+    local skill_ref
+    skill_ref=$(grep -oP 'skill at `\K[^`]+' "$cmd_file" 2>/dev/null || true)
+
+    local output_dir="$target_dir/.claude/commands"
+    mkdir -p "$output_dir"
+
+    if [ -n "$skill_ref" ]; then
+        # Resolve skill file path
+        local skill_path="$FORGE_ROOT/$skill_ref"
+        if [ ! -f "$skill_path" ]; then
+            local skill_dir
+            skill_dir=$(dirname "$skill_path")
+            if [ -f "$skill_dir/SKILL.md" ]; then
+                skill_path="$skill_dir/SKILL.md"
+            else
+                die "Skill file not found: $skill_ref"
+            fi
+        fi
+
+        # Inline: extract skill content (skip frontmatter) + add description
+        local skill_content
+        skill_content=$(awk '
+            BEGIN { in_frontmatter=0; past_frontmatter=0 }
+            /^---$/ && !past_frontmatter {
+                if (in_frontmatter) { past_frontmatter=1; next }
+                else { in_frontmatter=1; next }
+            }
+            past_frontmatter { print }
+        ' "$skill_path")
+
+        {
+            echo "---"
+            echo "description: ${description}"
+            echo "---"
+            echo ""
+            echo "$skill_content"
+        } > "$output_dir/${skill_name}.md"
+
+        success "Installed ${BOLD}${skill_name}${NC} → $output_dir/${skill_name}.md (inlined)"
+    else
+        # Self-contained — copy as-is
+        cp "$cmd_file" "$output_dir/${skill_name}.md"
+        success "Installed ${BOLD}${skill_name}${NC} → $output_dir/${skill_name}.md (copy)"
+    fi
+
+    install_helper_scripts "$skill_name" "$target_dir"
+
+    info "Usage: /${skill_name}"
+}
+
+# ---------------------------------------------------------------------------
+# Copy helper scripts associated with a skill
+#
+# Convention : si $FORGE_ROOT/scripts/<suffix>/ existe, copie récursivement
+# vers <target>/scripts/<suffix>/. Préserve le bit exécutable.
+#
+# Suffix tenté dans l'ordre :
+#   1. <skill_name> tel quel (ex: pf-cross-review-iterate)
+#   2. <skill_name> sans préfixe pf- (ex: cross-review-iterate)
+# ---------------------------------------------------------------------------
+install_helper_scripts() {
+    local skill_name="$1"
+    local target_dir="$2"
+
+    local candidates=("$skill_name" "${skill_name#pf-}" "${skill_name#speckit-}")
+    local src_dir=""
+    local suffix=""
+
+    for candidate in "${candidates[@]}"; do
+        if [ -d "$FORGE_ROOT/scripts/$candidate" ]; then
+            src_dir="$FORGE_ROOT/scripts/$candidate"
+            suffix="$candidate"
+            break
+        fi
+    done
+
+    [ -z "$src_dir" ] && return 0  # pas de helpers, skip silencieux
+
+    local dest_dir="$target_dir/scripts/$suffix"
+    mkdir -p "$dest_dir"
+    cp -r "$src_dir/." "$dest_dir/"
+
+    # Préserver bit exécutable sur les .sh
+    find "$dest_dir" -type f -name '*.sh' -exec chmod +x {} +
+
+    local count
+    count=$(find "$dest_dir" -type f | wc -l)
+    success "  └─ Copied $count helper file(s) → $dest_dir/"
+}
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+if [[ $# -eq 0 ]] || [[ "$1" == "--help" ]] || [[ "$1" == "-h" ]]; then
+    echo "Usage: ./tools/install-skill <skill-name> <target-project>"
+    echo "       ./tools/install-skill --list"
+    echo "       ./tools/install-skill --all <target-project>"
+    echo ""
+    echo "Installs a Project-Forge skill into any project's .claude/commands/"
+    echo "The skill is inlined (self-contained) — no dependency on Project-Forge."
+    exit 0
+fi
+
+if [[ "$1" == "--list" ]]; then
+    list_skills
+    exit 0
+fi
+
+if [[ "$1" == "--all" ]]; then
+    [[ $# -ge 2 ]] || die "Usage: ./tools/install-skill --all <target-project>"
+    for cmd_file in "$FORGE_ROOT"/commands/*.md; do
+        [ -f "$cmd_file" ] || continue
+        name=$(basename "$cmd_file" .md)
+        install_skill "$name" "$2"
+    done
+    exit 0
+fi
+
+[[ $# -ge 2 ]] || die "Usage: ./tools/install-skill <skill-name> <target-project>"
+install_skill "$1" "$2"

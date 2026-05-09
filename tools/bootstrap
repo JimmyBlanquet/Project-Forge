@@ -1,0 +1,1199 @@
+#!/usr/bin/env bash
+#
+# Project-Forge Bootstrap
+# Creates a new project from a starter template in one command.
+#
+# Usage: ./tools/bootstrap <project-name> [--starter <name>] [--dir <target-directory>]
+#
+# Examples:
+#   ./tools/bootstrap my-app                          # Uses default starter (supabase-stripe)
+#   ./tools/bootstrap my-app --starter saas-base      # Uses saas-base starter
+#   ./tools/bootstrap my-app --dir ~/Projets          # Creates ~/Projets/my-app/
+#   ./tools/bootstrap --list-starters                 # List available starters
+
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# Colors
+# ---------------------------------------------------------------------------
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+BOLD='\033[1m'
+DIM='\033[2m'
+NC='\033[0m' # No Color
+
+# ---------------------------------------------------------------------------
+# Project-Forge root (parent of tools/)
+# ---------------------------------------------------------------------------
+FORGE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# ---------------------------------------------------------------------------
+# Defaults
+# ---------------------------------------------------------------------------
+DEFAULT_STARTER="saas"
+STARTER=""
+PROJECT_NAME=""
+TARGET_DIR=""
+SETUP_GITHUB=false
+GITHUB_PRIVATE=false
+SETUP_VERCEL=false
+SETUP_PROTECT=false
+SKIP_SPECKIT=false
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+info()    { echo -e "${BLUE}[info]${NC}  $*"; }
+success() { echo -e "${GREEN}[ok]${NC}    $*"; }
+warn()    { echo -e "${YELLOW}[warn]${NC}  $*"; }
+error()   { echo -e "${RED}[error]${NC} $*" >&2; }
+die()     { error "$@"; exit 1; }
+
+# ---------------------------------------------------------------------------
+# Print banner
+# ---------------------------------------------------------------------------
+print_banner() {
+    echo -e "${BOLD}${BLUE}"
+    echo "  ____            _           _        _____"
+    echo " |  _ \\ _ __ ___ (_) ___  ___| |_     |  ___|__  _ __ __ _  ___"
+    echo " | |_) | '__/ _ \\| |/ _ \\/ __| __|____| |_ / _ \\| '__/ _\` |/ _ \\"
+    echo " |  __/| | | (_) | |  __/ (__| ||_____|  _| (_) | | | (_| |  __/"
+    echo " |_|   |_|  \\___// |\\___|\\___|\\__|    |_|  \\___/|_|  \\__, |\\___|"
+    echo "               |__/                                  |___/"
+    echo -e "${NC}"
+    echo -e "  ${BOLD}Bootstrap${NC} - Create a new project from a starter template"
+    echo ""
+}
+
+# ---------------------------------------------------------------------------
+# Print usage
+# ---------------------------------------------------------------------------
+usage() {
+    echo "Usage: $(basename "$0") <project-name> [options]"
+    echo ""
+    echo "Options:"
+    echo "  --starter <name>    Starter template to use (default: ${DEFAULT_STARTER})"
+    echo "  --dir <path>        Parent directory for the new project (default: current dir)"
+    echo "  --list-starters     List available starters and exit"
+    echo "  --github            Create GitHub repo (public) and push"
+    echo "  --github-private    Create GitHub repo (private) and push"
+    echo "  --vercel            Link Vercel project"
+    echo "  --protect           Protect main branch (requires --github)"
+    echo "  --no-speckit        Skip spec-kit initialization (specify init)"
+    echo "  -h, --help          Show this help and exit"
+    echo ""
+    echo "Examples:"
+    echo "  $(basename "$0") my-app"
+    echo "  $(basename "$0") my-app --starter saas-base"
+    echo "  $(basename "$0") my-app --dir ~/Projets"
+    echo "  $(basename "$0") --list-starters"
+}
+
+# ---------------------------------------------------------------------------
+# List available starters
+# ---------------------------------------------------------------------------
+list_starters() {
+    echo -e "${BOLD}Available starters:${NC}"
+    echo ""
+    for dir in "$FORGE_ROOT/starters"/*/; do
+        [ -d "$dir" ] || continue
+        local name
+        name=$(basename "$dir")
+        local desc=""
+        local source_repo=""
+        # Try to read description and source from PROJECT_FORGE_README.md
+        if [ -f "$dir/PROJECT_FORGE_README.md" ]; then
+            desc=$(grep -m1 -E "^(Starter|Ce starter)" "$dir/PROJECT_FORGE_README.md" 2>/dev/null | head -1 || true)
+            source_repo=$(extract_source_repo "$dir/PROJECT_FORGE_README.md")
+        fi
+        # Build a short one-liner description per starter
+        case "$name" in
+            saas)
+                desc="Next.js 15 + Drizzle + Supabase Auth + Stripe + Tailwind 4 (recommended)"
+                ;;
+            saas-base)
+                desc="Next.js 14 + Prisma + Auth.js v5 + Stripe + Resend (legacy)"
+                ;;
+            supabase-stripe)
+                desc="Next.js 14 + Drizzle + Supabase Auth + Stripe (legacy)"
+                ;;
+            *)
+                desc="${desc:-No description}"
+                ;;
+        esac
+        local default_marker=""
+        if [ "$name" = "$DEFAULT_STARTER" ]; then
+            default_marker=" ${YELLOW}(default)${NC}"
+        fi
+        echo -e "  ${GREEN}${BOLD}${name}${NC}${default_marker}"
+        echo -e "    ${desc}"
+        if [ -n "$source_repo" ]; then
+            echo -e "    Source: ${BLUE}https://github.com/${source_repo}${NC}"
+        fi
+        echo ""
+    done
+}
+
+# ---------------------------------------------------------------------------
+# Extract metadata from PROJECT_FORGE_README.md
+# ---------------------------------------------------------------------------
+extract_source_repo() {
+    local readme="$1"
+    # Look for pattern: [user/repo](https://github.com/user/repo)
+    # or **Source:** [user/repo](...)
+    grep -oP '\[([a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+)\]\(https://github\.com/' "$readme" 2>/dev/null \
+        | head -1 \
+        | grep -oP '[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+' \
+        || true
+}
+
+extract_source_commit() {
+    local readme="$1"
+    # Look for pattern: **Commit:** <hash>
+    grep -oP '(?<=\*\*Commit:\*\*\s)[a-f0-9]+' "$readme" 2>/dev/null \
+        | head -1 \
+        || true
+}
+
+# ---------------------------------------------------------------------------
+# Parse arguments
+# ---------------------------------------------------------------------------
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --starter)
+                [ -n "${2:-}" ] || die "Missing value for --starter"
+                STARTER="$2"
+                shift 2
+                ;;
+            --dir)
+                [ -n "${2:-}" ] || die "Missing value for --dir"
+                TARGET_DIR="$2"
+                shift 2
+                ;;
+            --list-starters)
+                list_starters
+                exit 0
+                ;;
+            -h|--help)
+                usage
+                exit 0
+                ;;
+            --github)      SETUP_GITHUB=true; shift ;;
+            --github-private) SETUP_GITHUB=true; GITHUB_PRIVATE=true; shift ;;
+            --vercel)      SETUP_VERCEL=true; shift ;;
+            --protect)     SETUP_PROTECT=true; shift ;;
+            --no-speckit)  SKIP_SPECKIT=true; shift ;;
+            -*)
+                die "Unknown option: $1 (see --help)"
+                ;;
+            *)
+                if [ -z "$PROJECT_NAME" ]; then
+                    PROJECT_NAME="$1"
+                else
+                    die "Unexpected argument: $1 (project name already set to '$PROJECT_NAME')"
+                fi
+                shift
+                ;;
+        esac
+    done
+}
+
+# ---------------------------------------------------------------------------
+# Validate inputs
+# ---------------------------------------------------------------------------
+validate() {
+    # Project name is required (unless --list-starters handled it above)
+    if [ -z "$PROJECT_NAME" ]; then
+        error "Project name is required."
+        echo ""
+        usage
+        exit 1
+    fi
+
+    # Validate project name (basic sanity: no slashes, no spaces)
+    if [[ "$PROJECT_NAME" =~ [/[:space:]] ]]; then
+        die "Project name must not contain slashes or spaces: '$PROJECT_NAME'"
+    fi
+
+    # Apply default starter if not specified
+    if [ -z "$STARTER" ]; then
+        STARTER="$DEFAULT_STARTER"
+    fi
+
+    # Resolve starter path
+    STARTER_PATH="$FORGE_ROOT/starters/$STARTER"
+    if [ ! -d "$STARTER_PATH" ]; then
+        error "Starter '$STARTER' not found at $STARTER_PATH"
+        echo ""
+        list_starters
+        exit 1
+    fi
+
+    # Resolve target directory
+    if [ -n "$TARGET_DIR" ]; then
+        # Expand ~ if present
+        TARGET_DIR="${TARGET_DIR/#\~/$HOME}"
+        if [ ! -d "$TARGET_DIR" ]; then
+            die "Target directory does not exist: $TARGET_DIR"
+        fi
+        PROJECT_DIR="$TARGET_DIR/$PROJECT_NAME"
+    else
+        PROJECT_DIR="$(pwd)/$PROJECT_NAME"
+    fi
+
+    # Check project directory does not already exist
+    if [ -e "$PROJECT_DIR" ]; then
+        die "Directory already exists: $PROJECT_DIR"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Generate CLAUDE.md skeleton
+# ---------------------------------------------------------------------------
+generate_claude_md() {
+    local project_dir="$1"
+    local project_name="$2"
+    local starter="$3"
+
+    info "Generating CLAUDE.md skeleton..."
+
+    local stack_desc=""
+    local db_section=""
+    local auth_section=""
+    local scripts_section=""
+
+    case "$starter" in
+        saas)
+            stack_desc="Next.js 15 + Drizzle ORM + Supabase Auth + Stripe + Tailwind 4"
+            db_section="- **ORM**: Drizzle (schema in \`lib/db/schema.ts\`, connection in \`lib/db/drizzle.ts\`)
+- **Database**: PostgreSQL (Supabase, Neon, or any provider)
+- **Migrations**: \`pnpm db:generate\` then \`pnpm db:migrate\`"
+            auth_section="- **Auth**: Supabase Auth (\`lib/supabase/server.ts\` + \`lib/supabase/client.ts\`)
+- **Pattern**: \`const supabase = await createClient(); const { data: { user } } = await supabase.auth.getUser();\`"
+            scripts_section="pnpm dev            # Start dev server (Turbopack)
+pnpm db:generate    # Generate Drizzle migrations
+pnpm db:migrate     # Apply migrations
+pnpm db:studio      # Open Drizzle Studio
+pnpm stripe:listen  # Forward Stripe webhooks locally
+pnpm test           # Run unit tests (vitest)
+pnpm typecheck      # TypeScript check
+pnpm quality:scan   # jscpd + knip + eslint"
+            ;;
+        supabase-stripe)
+            stack_desc="Next.js 14 + Drizzle ORM + Supabase Auth + Stripe (legacy)"
+            db_section="- **ORM**: Drizzle (schema in \`utils/db/schema.ts\`, connection in \`utils/db/db.ts\`)
+- **Database**: PostgreSQL via Supabase
+- **Migrations**: \`pnpm db:generate\` then \`pnpm db:migrate\`"
+            auth_section="- **Auth**: Supabase Auth (\`utils/supabase/server.ts\` + \`utils/supabase/client.ts\`)
+- **Pattern**: \`const supabase = await createClient(); const { data: { user } } = await supabase.auth.getUser();\`"
+            scripts_section="pnpm dev            # Start dev server
+pnpm db:generate    # Generate Drizzle migrations
+pnpm db:migrate     # Apply migrations
+pnpm db:studio      # Open Drizzle Studio
+pnpm stripe:setup   # Configure Stripe products
+pnpm stripe:listen  # Forward Stripe webhooks locally
+pnpm test           # Run unit tests (vitest)
+pnpm typecheck      # TypeScript check
+pnpm quality:scan   # jscpd + knip + eslint"
+            ;;
+        saas-base)
+            stack_desc="Next.js 14 + Prisma + Auth.js v5 + Stripe + Resend"
+            db_section="- **ORM**: Prisma (schema in \`prisma/schema.prisma\`)
+- **Database**: PostgreSQL via Neon
+- **Migrations**: \`pnpm prisma generate\` then \`pnpm prisma db push\`"
+            auth_section="- **Auth**: Auth.js v5 (Google, GitHub, credentials)
+- **Pattern**: \`import { auth } from '@/auth'; const session = await auth();\`"
+            scripts_section="pnpm dev             # Start dev server
+pnpm prisma generate # Generate Prisma client
+pnpm prisma db push  # Push schema to database
+pnpm prisma studio   # Open Prisma Studio
+pnpm test            # Run unit tests (vitest)
+pnpm typecheck       # TypeScript check
+pnpm quality:scan    # jscpd + knip + eslint"
+            ;;
+        *)
+            stack_desc="Next.js project"
+            db_section="- Check package.json for ORM details"
+            auth_section="- Check project files for auth setup"
+            scripts_section="pnpm dev    # Start dev server
+pnpm test   # Run tests"
+            ;;
+    esac
+
+    cat > "$project_dir/CLAUDE.md" <<EOF
+# ${project_name}
+
+## Stack
+
+${stack_desc}
+
+## Project Structure
+
+\`\`\`
+app/                 # Next.js App Router pages and API routes
+components/          # React components
+  ui/                # shadcn/ui primitives
+lib/                 # Shared utilities
+utils/               # Framework utilities (db, auth, etc.)
+\`\`\`
+
+## Database
+
+${db_section}
+
+## Authentication
+
+${auth_section}
+
+## Key Commands
+
+\`\`\`bash
+${scripts_section}
+\`\`\`
+
+## Conventions
+
+- API routes use Zod validation (see \`app/api/items/\` for example)
+- All DB queries verify user ownership (\`where user_id = current_user\`)
+- UI components use shadcn/ui + Tailwind CSS
+- Environment variables in \`.env\` (never commit secrets)
+
+## Architecture Decisions
+
+Document major decisions in \`docs/adr/\` using the template in \`docs/adr/TEMPLATE.md\`.
+When to create an ADR: technology choices, architecture changes, patterns affecting multiple components.
+
+## Git & Deployment Workflow
+
+\`\`\`
+feature branch → PR → Vercel Preview → CI vert → Merge main → Production
+\`\`\`
+
+- **main** = production. Ne JAMAIS push directement sur main.
+- Toujours creer une feature branch: \`git checkout -b feat/ma-feature\`
+- Creer une PR vers main: \`gh pr create --base main --fill\`
+- Vercel deploie automatiquement un preview sur chaque PR.
+- Le merge est bloque tant que le CI (lint, tests, build) n'est pas vert.
+- Apres merge, Vercel deploie automatiquement en production.
+- Ralph++ avec \`--auto-merge\`: pipeline 100% autonome (merge auto quand CI passe).
+
+## Project-Forge Workflow
+
+### Core (powered by spec-kit)
+\`\`\`
+/speckit.constitution   # Define project principles
+/speckit.specify        # Define what to build
+/speckit.clarify        # Clarify ambiguities interactively
+/speckit.plan           # Plan how to build
+/speckit.tasks          # Generate implementation tasks
+/speckit.checklist      # Quality checklist for specs
+\`\`\`
+
+### Extensions Project-Forge
+\`\`\`
+/speckit-convert        # Convert tasks to PRD for Ralph++
+/speckit-recette        # Acceptance testing from spec
+/speckit-e2e            # E2E testing with browser agent
+/speckit-test-bridge    # Spec to Playwright pipeline
+/speckit-archi-review   # Architecture review
+/speckit-threat-model   # STRIDE security analysis
+/speckit-audit-sdlc     # SDLC maturity audit
+/ralph-loop             # Autonomous implementation
+\`\`\`
+
+## Sensitive File Edits — Anti-stall protocol
+
+Quand tu dois modifier un fichier de configuration globale ou hors du projet courant (\`~/.claude/CLAUDE.md\`, \`~/.claude/settings.json\`, \`~/.gitconfig\`, \`/etc/*\`, autres fichiers globaux) :
+
+1. **Tente l'edit direct** (Read puis Edit). Le user reçoit une demande d'autorisation.
+2. **Si l'edit est autorisé** → fait, on continue normalement.
+3. **Si l'edit est refusé** (et seulement dans ce cas, en fallback) → output le contenu/diff exact dans un code block markdown + dire à l'utilisateur *"applique manuellement à \`<file>\`"* + tracker via TodoWrite comme \`pending manual application — \<file\>\`.
+
+**Anti-pattern** : ne PAS afficher d'office un diff "à appliquer manuellement" sans tenter l'edit. Le copier-coller humain introduit des erreurs ; l'edit machine est plus fiable. Le fallback manuel n'existe que pour le cas refus explicite.
+
+## Tickets GitHub — discipline de mise à jour
+
+À chaque commit qui référence un ticket (\`#N\` dans le message), s'assurer que le ticket est dans le bon état (close si commit \"Closes #N\", commenter si \"Refs #N\"). Le hook Stop \`scripts/check-ticket-update.sh\` rappelle automatiquement les tickets référencés encore OPEN. Ne pas ignorer ce rappel — la mise à jour des tickets est non négociable : c'est ce qui rend la trace de décision réutilisable plusieurs mois plus tard.
+
+## Debugging — feedback loop first
+
+90% du debug efficace = construire un signal pass/fail rapide AVANT de chercher la cause. Sur n'importe quel bug : (a) écris d'abord un test qui reproduit (même grossier — un curl, une commande, un script), (b) confirme qu'il fail rouge, (c) PUIS itère sur la cause en re-runnant le signal après chaque hypothèse. Ne JAMAIS spéculer sur la cause sans un signal qui dit \"encore cassé / réparé\". Anti-pattern : lire le code et \"raisonner\" sur le bug pendant 20 minutes sans avoir un repro automatique.
+
+## ADR sparingly
+
+Un ADR n'est justifié QUE si les 3 critères sont vrais simultanément — (a) hard to reverse, (b) surprising without context, (c) result of a real trade-off. Si UN seul manque → pas d'ADR, un commit message ou un commentaire suffit. Voir \`docs/adr/README.md\` pour exemples. Évite l'ADR-spam qui rend le dossier illisible.
+
+## Vertical slices via tracer bullets
+
+Quand tu décomposes une feature en sub-stories (Ralph++, tasks, tickets), groupe par **comportement utilisateur final** (mini-feature E2E traversant toute la stack), JAMAIS par couche (tests / API / UI / doc séparés). Anti-pattern : \"tous les tests d'abord puis toute l'implé\" — ça donne un faux progrès et rien n'est testable indépendamment.
+
+## Quality Gate — Vérification obligatoire avant complétion
+
+**Règle absolue** : tu ne peux JAMAIS dire "c'est fait", "c'est corrigé", "c'est livré" ou toute
+variante sans avoir COMPLÉTÉ ET DOCUMENTÉ les 3 niveaux ci-dessous.
+Chaque niveau est un prérequis du suivant. Si un niveau échoue, corriger et recommencer
+CE niveau (max 3 tentatives par niveau).
+
+### Niveau 1 — Vérification statique
+- [ ] \`pnpm typecheck\` → 0 erreur nouvelle (les pré-existantes documentées sont OK)
+- [ ] \`pnpm lint\` → 0 erreur nouvelle
+- [ ] \`pnpm test:run\` → 0 test en échec, 0 test supprimé vs baseline
+- [ ] Si nouvelle feature : tests unitaires écrits (au moins cas nominal + 1 edge case)
+- [ ] Si bugfix : test de non-régression écrit AVANT le fix
+→ Si un check échoue : corriger, recommencer. Ne PAS passer au Niveau 2.
+
+### Niveau 2 — Vérification runtime
+- [ ] App lancée localement (\`pnpm dev\`) sans erreur console
+- [ ] Navigation (via Playwright ou browser tool) sur la page modifiée
+- [ ] Vérification que le comportement attendu fonctionne
+- [ ] Vérification qu'aucune page adjacente n'est cassée (smoke test)
+- [ ] Si modification UI : screenshot AVANT/APRÈS capturé
+→ Si un check échoue : corriger, recommencer Niveau 2. Ne PAS passer au Niveau 3.
+
+### Niveau 3 — Preuve de complétion
+- [ ] Commit avec message conventionnel : \`type(scope): description\`
+- [ ] \`Co-Authored-By: Claude\` ajouté
+- [ ] Résumé de complétion fourni avec :
+  - Ce qui a été fait (1-2 lignes)
+  - Tests ajoutés/modifiés (noms des fichiers)
+  - Vérification browser : page testée, comportement confirmé
+  - Screenshot si modification UI (path du fichier)
+- [ ] Push sur feature branch (JAMAIS sur staging ou master sans accord explicite)
+
+### Ce que tu ne peux PAS faire
+- Dire "c'est corrigé" sans avoir exécuté les tests
+- Dire "j'ai vérifié" sans preuve (screenshot ou log de test)
+- Supprimer un test qui échoue au lieu de corriger le code
+- Skipper la vérification browser en disant "changement mineur"
+- Push sur staging/master sans confirmation explicite de l'utilisateur
+- Considérer que "ça compile" = "ça marche"
+
+### Escalade
+Si après 3 tentatives un niveau ne passe toujours pas :
+1. STOP — ne pas continuer
+2. Documenter précisément ce qui échoue et pourquoi
+3. Signaler le blocage à l'utilisateur avec les logs
+4. Ne PAS proposer de contournement silencieux
+EOF
+
+    success "CLAUDE.md generated."
+}
+
+# ---------------------------------------------------------------------------
+# Generate CONTEXT.md skeleton (ubiquitous language — separate from CLAUDE.md)
+# Pattern emprunte a mattpocock : CLAUDE.md = comportement agent ;
+# CONTEXT.md = vocabulaire metier specifique au projet, partage humain/IA.
+# ---------------------------------------------------------------------------
+generate_context_md() {
+    local project_dir="$1"
+    local project_name="$2"
+
+    info "Generating CONTEXT.md skeleton (ubiquitous language)..."
+
+    cat > "$project_dir/CONTEXT.md" <<EOF
+# ${project_name} — CONTEXT.md (vocabulaire métier)
+
+> **Pourquoi ce fichier ?** \`CLAUDE.md\` décrit *comment Claude doit se comporter*. \`CONTEXT.md\` décrit *le vocabulaire spécifique du domaine*, partagé entre humains et IA. Pattern emprunté à mattpocock — séparation du comportement et de l'ubiquitous language.
+>
+> Si un terme apparaît dans une conversation et qu'un nouvel arrivant pourrait le mal interpréter, sa définition doit être ici.
+
+## Termes métier
+
+| Terme | Définition précise (dans le contexte ${project_name}) |
+|---|---|
+| _<terme>_ | _<définition spécifique au domaine — pas de définition générique copiée d'un dictionnaire>_ |
+
+## Entités principales
+
+_(Décrire les principales entités du domaine, leurs relations, leurs invariants.)_
+
+- **<Entité>** : _<rôle dans le domaine>_
+
+## Termes à NE PAS confondre
+
+_(Lister les paires de termes proches mais distincts qui causent des erreurs.)_
+
+- _<termeA> ≠ <termeB>_ : _<distinction>_
+
+## Comment maintenir ce fichier
+
+- À chaque fois qu'un terme nouveau émerge en conversation et qu'il a une définition spécifique → l'ajouter ici.
+- À chaque fois qu'un terme évolue → le mettre à jour.
+- Pas de définitions génériques (ne pas définir "Next.js" — ça vient de la doc Next.js). Ce fichier capture ce qui est spécifique à **ce projet**.
+EOF
+
+    success "CONTEXT.md skeleton generated."
+}
+
+# ---------------------------------------------------------------------------
+# Generate ADR scaffold (docs/adr/ with README + TEMPLATE)
+# ---------------------------------------------------------------------------
+generate_adr_scaffold() {
+    local project_dir="$1"
+    local project_name="$2"
+
+    info "Generating ADR scaffold..."
+
+    mkdir -p "$project_dir/docs/adr"
+
+    cat > "$project_dir/docs/adr/README.md" <<'EOF'
+# Architecture Decision Records (ADR)
+
+Ce dossier contient les decisions architecturales du projet.
+
+## Pourquoi des ADR ?
+
+- **Memoire institutionnelle** : Comprendre pourquoi certaines decisions ont ete prises
+- **Eviter les regressions** : Ne pas refaire les memes erreurs
+- **Onboarding** : Nouveaux contributeurs comprennent le contexte
+- **Tracabilite** : Historique des decisions importantes
+
+## Index des ADR
+
+| ID | Titre | Date | Status |
+|----|-------|------|--------|
+| _Aucun ADR pour le moment_ | | | |
+
+## Quand Creer un ADR ? — regle stricte (anti-spam)
+
+Pattern emprunte a mattpocock : un ADR n'est justifie **que si les 3 criteres sont vrais simultanement** :
+
+1. **Hard to reverse** — cout eleve pour revenir en arriere
+2. **Surprising without context** — un nouvel arrivant ne devinerait pas ce choix juste en lisant le code
+3. **Result of a real trade-off** — il y avait une vraie alternative qu'on a ecartee pour de bonnes raisons
+
+Si UN seul des 3 manque -> pas d'ADR. Le commit message ou un commentaire cible suffit.
+
+Exemples :
+- ADR justifie : choix d'ORM (Drizzle vs Prisma), passage NATS vs file-based, schema de stockage
+- Pas d'ADR : ajouter un endpoint REST, refactor d'un composant, choix d'un linter
+
+Pourquoi cette regle stricte : un dossier d'ADR rempli de "decisions" triviales devient illisible.
+EOF
+
+    cat > "$project_dir/docs/adr/TEMPLATE.md" <<'EOF'
+# ADR-XXX: Titre de la Decision
+
+**Date:** YYYY-MM-DD
+**Status:** Propose | Accepte | Deprecie | Remplace par ADR-YYY
+
+## Contexte
+
+Quel est le probleme ? Quel contexte mene a cette decision ?
+
+## Decision
+
+Quelle solution avons-nous choisie et pourquoi ?
+
+## Consequences
+
+### Positives
+- Avantage 1
+
+### Negatives
+- Inconvenient 1
+
+### Risques
+- Risque 1 + mitigation
+
+## Alternatives Considerees
+
+### Alternative A
+- **Description :**
+- **Pourquoi rejetee :**
+
+## Implementation
+
+- **Fichiers affectes :**
+- **Timeline :**
+
+## References
+
+- Liens externes
+EOF
+
+    success "ADR scaffold created (docs/adr/)."
+}
+
+# ---------------------------------------------------------------------------
+# GitHub setup
+# ---------------------------------------------------------------------------
+setup_github() {
+    local project_dir="$1"
+    local project_name="$2"
+
+    if ! command -v gh &>/dev/null; then
+        die "GitHub CLI (gh) not found. Install: https://cli.github.com/"
+    fi
+    if ! gh auth status &>/dev/null 2>&1; then
+        die "Not logged in to GitHub. Run: gh auth login"
+    fi
+
+    local visibility="--public"
+    if $GITHUB_PRIVATE; then
+        visibility="--private"
+    fi
+
+    info "Creating GitHub repository ($visibility)..."
+    if ! (cd "$project_dir" && gh repo create "$project_name" $visibility --source . --push 2>/dev/null); then
+        warn "Could not create GitHub repo. You may need to create it manually."
+        return 1
+    fi
+    success "GitHub repository created and pushed."
+}
+
+# ---------------------------------------------------------------------------
+# Vercel setup
+# ---------------------------------------------------------------------------
+setup_vercel() {
+    local project_dir="$1"
+
+    if ! command -v vercel &>/dev/null; then
+        die "Vercel CLI not found. Install: npm i -g vercel"
+    fi
+    if ! vercel whoami &>/dev/null 2>&1; then
+        die "Not logged in to Vercel. Run: vercel login"
+    fi
+
+    info "Linking Vercel project..."
+    if ! (cd "$project_dir" && vercel link --yes 2>/dev/null); then
+        warn "Could not link Vercel project. Run 'vercel link' manually."
+        return 1
+    fi
+    success "Vercel project linked."
+
+    info "Pulling Vercel environment variables..."
+    (cd "$project_dir" && vercel env pull .env.local 2>/dev/null) || true
+}
+
+# ---------------------------------------------------------------------------
+# Branch protection setup
+# ---------------------------------------------------------------------------
+setup_protect() {
+    local project_dir="$1"
+
+    if [ -x "$FORGE_ROOT/tools/protect-main" ]; then
+        info "Protecting main branch..."
+        (cd "$project_dir" && "$FORGE_ROOT/tools/protect-main") || warn "Could not protect main. Run tools/protect-main manually."
+    else
+        warn "tools/protect-main not found or not executable."
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Install Project-Forge spec-kit extensions
+# ---------------------------------------------------------------------------
+install_pf_extensions() {
+    local project_dir="$1"
+    local extensions_dir="$FORGE_ROOT/extensions"
+
+    if [ ! -d "$extensions_dir" ]; then
+        warn "No extensions/ directory found in Project-Forge. Skipping."
+        return 0
+    fi
+
+    local ext_count=0
+    for ext_dir in "$extensions_dir"/pf-*/; do
+        [ -d "$ext_dir" ] || continue
+        [ -f "$ext_dir/extension.yml" ] || continue
+        local ext_name
+        ext_name=$(basename "$ext_dir")
+
+        if (cd "$project_dir" && specify extension add "$ext_dir" --dev 2>/dev/null); then
+            ext_count=$((ext_count + 1))
+        else
+            warn "Failed to install extension $ext_name"
+        fi
+    done
+
+    if [ $ext_count -gt 0 ]; then
+        success "$ext_count Project-Forge extensions installed."
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Initialize spec-kit (specify init)
+# ---------------------------------------------------------------------------
+setup_speckit() {
+    local project_dir="$1"
+
+    if $SKIP_SPECKIT; then
+        info "Skipping spec-kit initialization (--no-speckit)."
+        return 0
+    fi
+
+    if ! command -v specify &>/dev/null; then
+        warn "spec-kit CLI (specify) not found."
+        warn "Install with: uv tool install specify-cli --from git+https://github.com/github/spec-kit.git@v0.3.2"
+        warn "Skipping spec-kit initialization. Run 'specify init . --ai claude' manually later."
+        return 0
+    fi
+
+    info "Initializing spec-kit (specify init)..."
+    if (cd "$project_dir" && specify init . --ai claude --force 2>/dev/null); then
+        success "spec-kit initialized (.specify/ created)."
+
+        # Install Project-Forge extensions
+        install_pf_extensions "$project_dir"
+
+        # Remove spec-kit generated memory/ if empty or default
+        if [ -d "$project_dir/memory" ] && [ -z "$(ls -A "$project_dir/memory" 2>/dev/null)" ]; then
+            rmdir "$project_dir/memory" 2>/dev/null || true
+        fi
+    else
+        warn "spec-kit initialization failed. Run 'specify init . --ai claude' manually."
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Install commands (inline skills for portability)
+# ---------------------------------------------------------------------------
+install_commands() {
+    local forge_root="$1"
+    local project_dir="$2"
+
+    for cmd_file in "$forge_root"/commands/*.md; do
+        [ -f "$cmd_file" ] || continue
+        local cmd_name
+        cmd_name=$(basename "$cmd_file")
+
+        # Check if command is a stub that references a skill file
+        local skill_ref
+        skill_ref=$(grep -oP 'skill at `\K[^`]+' "$cmd_file" 2>/dev/null || true)
+
+        if [ -n "$skill_ref" ]; then
+            # Resolve skill file path (try SKILL.md if prompt.md not found)
+            local skill_path="$forge_root/$skill_ref"
+            if [ ! -f "$skill_path" ]; then
+                # Try SKILL.md in the same directory
+                local skill_dir
+                skill_dir=$(dirname "$skill_path")
+                if [ -f "$skill_dir/SKILL.md" ]; then
+                    skill_path="$skill_dir/SKILL.md"
+                else
+                    # Skill file not found — copy stub as-is
+                    cp "$cmd_file" "$project_dir/.claude/commands/$cmd_name"
+                    continue
+                fi
+            fi
+
+            # Extract description from the command stub frontmatter
+            local description
+            description=$(sed -n 's/^description: *//p' "$cmd_file" | head -1)
+
+            # Read skill content (skip its frontmatter)
+            local skill_content
+            skill_content=$(awk '
+                BEGIN { in_frontmatter=0; past_frontmatter=0 }
+                /^---$/ && !past_frontmatter {
+                    if (in_frontmatter) { past_frontmatter=1; next }
+                    else { in_frontmatter=1; next }
+                }
+                past_frontmatter { print }
+            ' "$skill_path")
+
+            # Write self-contained command
+            {
+                echo "---"
+                echo "description: ${description}"
+                echo "---"
+                echo ""
+                echo "$skill_content"
+            } > "$project_dir/.claude/commands/$cmd_name"
+        else
+            # Self-contained command — copy as-is
+            cp "$cmd_file" "$project_dir/.claude/commands/$cmd_name"
+        fi
+    done
+}
+
+# ---------------------------------------------------------------------------
+# Install Claude Code local settings (MCP servers, hooks)
+# ---------------------------------------------------------------------------
+install_claude_settings_local() {
+    local project_dir="$1"
+    local template="$project_dir/.claude/settings.local.json.template"
+
+    if [ -f "$template" ]; then
+        info "Installing Claude Code local settings (MCP Playwright, hooks)..."
+        cp "$template" "$project_dir/.claude/settings.local.json"
+        success ".claude/settings.local.json created from template."
+    else
+        info "Creating .claude/settings.local.json (MCP Playwright)..."
+        mkdir -p "$project_dir/.claude"
+        cat > "$project_dir/.claude/settings.local.json" <<'ENDJSON'
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["@playwright/mcp@latest", "--headless"]
+    }
+  }
+}
+ENDJSON
+        success ".claude/settings.local.json created."
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Install PF Stop hooks (check-ticket-update + test-verification-reminder)
+# Copie les 2 scripts depuis le repo PF et wire les hooks dans .claude/settings.json
+# (créé si absent, ne touche pas .claude/settings.local.json qui a un autre rôle).
+# ---------------------------------------------------------------------------
+install_pf_hooks() {
+    local project_dir="$1"
+    local pf_root="$2"
+
+    info "Installing Project-Forge Stop hooks (ticket-update + test-verification)..."
+
+    mkdir -p "$project_dir/scripts" "$project_dir/.claude"
+
+    # Copy hooks
+    cp "$pf_root/scripts/check-ticket-update.sh" "$project_dir/scripts/"
+    cp "$pf_root/scripts/test-verification-reminder.sh" "$project_dir/scripts/"
+    chmod +x "$project_dir/scripts/check-ticket-update.sh" \
+             "$project_dir/scripts/test-verification-reminder.sh"
+
+    # Wire .claude/settings.json (Stop hooks). Si déjà existant (cas starter saas
+    # qui a son propre wiring), génère un .pf-template à côté avec les snippets PF
+    # à merger manuellement — évite de perdre l'info silencieusement.
+    local settings="$project_dir/.claude/settings.json"
+    local pf_snippet='{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-ticket-update.sh",
+            "timeout": 8000
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/test-verification-reminder.sh",
+            "timeout": 5000
+          }
+        ]
+      }
+    ]
+  }
+}'
+
+    if [ -f "$settings" ]; then
+        echo "$pf_snippet" > "$project_dir/.claude/settings.json.pf-hooks-template"
+        info ".claude/settings.json déjà présent (starter custom). Snippet PF à merger : .claude/settings.json.pf-hooks-template"
+    else
+        echo "$pf_snippet" > "$settings"
+        success "Project-Forge hooks installés (scripts/ + .claude/settings.json)."
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Install git hooks (from tools/git-hooks.d/ into project's .git/hooks/)
+# ---------------------------------------------------------------------------
+install_git_hooks() {
+    local project_dir="$1"
+    local hooks_src="$FORGE_ROOT/tools/git-hooks.d"
+    local hooks_dst="$project_dir/.git/hooks"
+
+    [ -d "$hooks_src" ] || return 0
+    [ -d "$hooks_dst" ] || return 0
+
+    local count=0
+    for hook in "$hooks_src"/*; do
+        [ -f "$hook" ] || continue
+        cp "$hook" "$hooks_dst/$(basename "$hook")"
+        chmod +x "$hooks_dst/$(basename "$hook")"
+        count=$((count + 1))
+    done
+    [ "$count" -gt 0 ] && success "Git hooks installed ($count)."
+}
+
+# ---------------------------------------------------------------------------
+# Create project
+# ---------------------------------------------------------------------------
+create_project() {
+    info "Creating project ${BOLD}${PROJECT_NAME}${NC} from starter ${BOLD}${STARTER}${NC}..."
+    info "Target: $PROJECT_DIR"
+    echo ""
+
+    # ---- Copy starter template (exclude heavy / generated dirs) ----
+    info "Copying starter template..."
+    rsync -a \
+        --exclude='node_modules' \
+        --exclude='.next' \
+        --exclude='.git' \
+        --exclude='.turbo' \
+        --exclude='dist' \
+        --exclude='.vercel' \
+        --exclude='.supabase' \
+        "$STARTER_PATH/" "$PROJECT_DIR/"
+    success "Template copied."
+
+    # ---- Update package.json ----
+    if [ -f "$PROJECT_DIR/package.json" ]; then
+        info "Updating package.json name to '${PROJECT_NAME}'..."
+        # Use a portable approach with a temp file to avoid sed -i portability issues
+        local tmp
+        tmp=$(mktemp)
+        # Replace the first "name" field in package.json
+        sed "0,/\"name\":[[:space:]]*\"[^\"]*\"/s//\"name\": \"${PROJECT_NAME}\"/" \
+            "$PROJECT_DIR/package.json" > "$tmp" \
+            && mv "$tmp" "$PROJECT_DIR/package.json"
+        success "package.json updated."
+    else
+        warn "No package.json found in starter - skipping name update."
+    fi
+
+    # ---- Create .env from .env.example if present ----
+    if [ -f "$PROJECT_DIR/.env.example" ] && [ ! -f "$PROJECT_DIR/.env" ]; then
+        cp "$PROJECT_DIR/.env.example" "$PROJECT_DIR/.env"
+        info "Created .env from .env.example -- update it with your credentials."
+    fi
+
+    # ---- Create .project-forge/config.json ----
+    info "Writing .project-forge/config.json..."
+    mkdir -p "$PROJECT_DIR/.project-forge"
+
+    local source_repo=""
+    local source_commit=""
+    local readme_path="$STARTER_PATH/PROJECT_FORGE_README.md"
+    if [ -f "$readme_path" ]; then
+        source_repo=$(extract_source_repo "$readme_path")
+        source_commit=$(extract_source_commit "$readme_path")
+    fi
+
+    local created_at
+    created_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+    cat > "$PROJECT_DIR/.project-forge/config.json" <<ENDJSON
+{
+  "name": "${PROJECT_NAME}",
+  "starter": "${STARTER}",
+  "source_repo": "${source_repo}",
+  "source_commit": "${source_commit}",
+  "created_at": "${created_at}"
+}
+ENDJSON
+    success ".project-forge/config.json created."
+
+    # ---- Initialize spec-kit ----
+    setup_speckit "$PROJECT_DIR"
+
+    # ---- Install Project-Forge commands (with skill inlining) ----
+    if [ -d "$FORGE_ROOT/commands" ]; then
+        info "Installing Project-Forge commands..."
+        mkdir -p "$PROJECT_DIR/.claude/commands"
+        install_commands "$FORGE_ROOT" "$PROJECT_DIR"
+        success "Commands installed (.claude/commands/)."
+    fi
+
+    # ---- Install Claude Code local settings (MCP, hooks) ----
+    install_claude_settings_local "$PROJECT_DIR"
+
+    # ---- Install PF Stop hooks (ticket-update + test-verification) ----
+    install_pf_hooks "$PROJECT_DIR" "$FORGE_ROOT"
+
+    # ---- Generate CLAUDE.md ----
+    generate_claude_md "$PROJECT_DIR" "$PROJECT_NAME" "$STARTER"
+
+    # ---- Generate CONTEXT.md skeleton (ubiquitous language) ----
+    generate_context_md "$PROJECT_DIR" "$PROJECT_NAME"
+
+    # ---- Generate ADR scaffold ----
+    generate_adr_scaffold "$PROJECT_DIR" "$PROJECT_NAME"
+
+    # ---- Initialize git repo ----
+    info "Initializing git repository..."
+    git -C "$PROJECT_DIR" init -q
+    git -C "$PROJECT_DIR" add -A
+    # Fallback identity SCOPED to the initial commit only (CI runners + fresh dev
+    # machines have no global git config). We pass identity inline via -c flags
+    # so the repo's local config is NOT mutated — subsequent commits will use
+    # whatever identity the user configures globally or locally later.
+    if git -C "$PROJECT_DIR" config --get user.email >/dev/null 2>&1 \
+       && git -C "$PROJECT_DIR" config --get user.name >/dev/null 2>&1; then
+        git -C "$PROJECT_DIR" commit -q -m "Initial commit from Project-Forge (starter: ${STARTER})"
+    else
+        git -C "$PROJECT_DIR" \
+            -c user.email="bootstrap@project-forge.local" \
+            -c user.name="Project-Forge Bootstrap" \
+            commit -q -m "Initial commit from Project-Forge (starter: ${STARTER})"
+    fi
+    success "Git repository initialized with initial commit."
+
+    # ---- Install git hooks ----
+    install_git_hooks "$PROJECT_DIR"
+
+    # ---- GitHub setup (if requested) ----
+    if $SETUP_GITHUB; then
+        setup_github "$PROJECT_DIR" "$PROJECT_NAME"
+    fi
+
+    # ---- Vercel setup (if requested) ----
+    if $SETUP_VERCEL; then
+        setup_vercel "$PROJECT_DIR"
+    fi
+
+    # ---- Branch protection (if requested) ----
+    if $SETUP_PROTECT; then
+        if ! $SETUP_GITHUB; then
+            warn "--protect requires --github or --github-private. Skipping."
+        else
+            setup_protect "$PROJECT_DIR"
+        fi
+    fi
+
+    echo ""
+}
+
+# ---------------------------------------------------------------------------
+# Print next steps
+# ---------------------------------------------------------------------------
+print_next_steps() {
+    echo -e "${GREEN}${BOLD}Project '${PROJECT_NAME}' created successfully!${NC}"
+    echo ""
+    echo -e "${BOLD}Next steps:${NC}"
+    echo ""
+    echo "  cd ${PROJECT_DIR}"
+    echo ""
+
+    case "$STARTER" in
+        saas)
+            echo "  # 1. Install dependencies"
+            echo "  pnpm install"
+            echo ""
+            echo "  # 2. Configure environment variables"
+            echo "  # Edit .env with your Supabase, Stripe, and DB credentials"
+            echo ""
+            echo "  # 3. Setup database"
+            echo "  pnpm db:setup       # Create tables"
+            echo "  pnpm db:seed        # Seed initial data"
+            echo ""
+            echo "  # 4. Start development server"
+            echo "  pnpm dev"
+            ;;
+        supabase-stripe)
+            echo "  # 1. Install dependencies"
+            echo "  pnpm install"
+            echo ""
+            echo "  # 2. Configure environment variables"
+            echo "  # Edit .env with your Supabase and Stripe credentials"
+            echo ""
+            echo "  # 3. Run database migrations"
+            echo "  pnpm db:migrate"
+            echo ""
+            echo "  # 4. Start development server"
+            echo "  pnpm dev"
+            ;;
+        saas-base)
+            echo "  # 1. Install dependencies"
+            echo "  pnpm install"
+            echo ""
+            echo "  # 2. Configure environment variables"
+            echo "  # Edit .env with your Neon, Stripe, Auth.js, and Resend credentials"
+            echo ""
+            echo "  # 3. Setup database"
+            echo "  pnpm prisma generate"
+            echo "  pnpm prisma db push"
+            echo ""
+            echo "  # 4. Start development server"
+            echo "  pnpm dev"
+            ;;
+        *)
+            echo "  # 1. Install dependencies"
+            echo "  pnpm install"
+            echo ""
+            echo "  # 2. Configure environment variables"
+            echo "  # Edit .env with your credentials"
+            echo ""
+            echo "  # 3. Start development server"
+            echo "  pnpm dev"
+            ;;
+    esac
+
+    echo ""
+    if ! $SETUP_GITHUB; then
+        echo "  # After pushing to GitHub, protect main branch:"
+        echo "  ${FORGE_ROOT}/tools/protect-main"
+        echo ""
+    fi
+    echo -e "${BOLD}Project-Forge workflow (spec-kit + extensions):${NC}"
+    echo ""
+    echo "  /speckit.constitution   # Define project principles"
+    echo "  /speckit.specify        # Define what to build"
+    echo "  /speckit.plan           # Plan how to build"
+    echo "  /speckit.tasks          # Generate tasks"
+    echo "  /speckit-convert        # Convert to PRD (PF extension)"
+    echo "  /ralph-loop             # Autonomous implementation"
+    echo "  /speckit-audit-sdlc     # Audit project maturity"
+    echo ""
+
+    # ---- Recommend MCP servers ----
+    print_mcp_recommendations
+}
+
+# ---------------------------------------------------------------------------
+# Recommend MCP servers based on starter
+# ---------------------------------------------------------------------------
+print_mcp_recommendations() {
+    echo -e "${BOLD}Recommended MCP servers:${NC}"
+    echo ""
+    echo "  These MCP servers let Claude Code interact directly with your services."
+    echo "  Install them from your project directory with 'claude mcp add'."
+    echo ""
+
+    # Sentry — always recommended
+    echo -e "  ${GREEN}1.${NC} ${BOLD}Sentry${NC} (error tracking — reads prod errors, proposes fixes)"
+    echo "     claude mcp add --transport http sentry https://mcp.sentry.dev/mcp"
+    echo ""
+
+    case "$STARTER" in
+        saas)
+            echo -e "  ${GREEN}2.${NC} ${BOLD}Supabase${NC} (database, auth, RLS — manage tables & debug auth)"
+            echo "     claude mcp add --transport http supabase https://mcp.supabase.com"
+            echo ""
+            echo -e "  ${GREEN}3.${NC} ${BOLD}Stripe${NC} (payments — debug webhooks, check charges)"
+            echo "     claude mcp add --transport http stripe https://mcp.stripe.com"
+            echo ""
+            echo -e "  ${GREEN}4.${NC} ${BOLD}Resend${NC} (email — manage domains, contacts, audiences, send emails)"
+            echo "     claude mcp add resend -e RESEND_API_KEY=re_xxx -- npx -y resend-mcp"
+            echo ""
+            ;;
+        supabase-stripe)
+            echo -e "  ${GREEN}2.${NC} ${BOLD}Supabase${NC} (database, auth, RLS — manage tables & debug auth)"
+            echo "     claude mcp add --transport http supabase https://mcp.supabase.com"
+            echo ""
+            echo -e "  ${GREEN}3.${NC} ${BOLD}Stripe${NC} (payments — debug webhooks, check charges)"
+            echo "     claude mcp add --transport http stripe https://mcp.stripe.com"
+            echo ""
+            ;;
+        saas-base)
+            echo -e "  ${GREEN}2.${NC} ${BOLD}Stripe${NC} (payments — debug webhooks, check charges)"
+            echo "     claude mcp add --transport http stripe https://mcp.stripe.com"
+            echo ""
+            echo -e "  ${GREEN}3.${NC} ${BOLD}Resend${NC} (email — manage domains, contacts, audiences, send emails)"
+            echo "     claude mcp add resend -e RESEND_API_KEY=re_xxx -- npx -y resend-mcp"
+            echo ""
+            ;;
+    esac
+
+    echo -e "  ${DIM}Run /mcp inside Claude Code to authenticate after adding.${NC}"
+    echo ""
+}
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+main() {
+    print_banner
+    parse_args "$@"
+    validate
+    create_project
+    print_next_steps
+}
+
+main "$@"

@@ -1,0 +1,66 @@
+name: Test harness
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  forge-eval:
+    name: forge-eval.sh
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python (some skills check Python presence)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python deps for harness (PyYAML for extension.yml + ci.yml validation)
+        run: pip install pyyaml
+
+      - name: Set up Node (some skills check Node presence)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run forge-eval test harness
+        run: bash tests/forge-eval.sh
+
+  bootstrap-smoke:
+    name: bootstrap smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Bootstrap a temporary project
+        run: ./tools/bootstrap smoke-test --dir /tmp --starter saas
+
+      - name: Verify bootstrap produced expected structure
+        run: |
+          test -d /tmp/smoke-test || (echo "bootstrap did not create target dir"; exit 1)
+          test -d /tmp/smoke-test/.project-forge || (echo "missing .project-forge metadata"; exit 1)
+          test -f /tmp/smoke-test/package.json || (echo "missing package.json"; exit 1)
+          test -f /tmp/smoke-test/CLAUDE.md || (echo "missing CLAUDE.md"; exit 1)
+          test -f /tmp/smoke-test/CONTEXT.md || (echo "missing CONTEXT.md (ubiquitous language template)"; exit 1)
+          test -f /tmp/smoke-test/docs/adr/README.md || (echo "missing docs/adr/README.md"; exit 1)
+          test -f /tmp/smoke-test/docs/adr/TEMPLATE.md || (echo "missing docs/adr/TEMPLATE.md"; exit 1)
+          grep -q "Sensitive File Edits" /tmp/smoke-test/CLAUDE.md || (echo "missing rule 'Sensitive File Edits' in generated CLAUDE.md"; exit 1)
+          grep -qiE "ADR sparingly|hard.to.reverse" /tmp/smoke-test/docs/adr/README.md || (echo "missing 'ADR sparingly' rule in generated docs/adr/README.md"; exit 1)
+          echo "✅ Bootstrap structure valid (8 fichiers + 2 patterns)"
+          ls -la /tmp/smoke-test/ | head -20

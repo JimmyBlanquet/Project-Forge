@@ -1,0 +1,54 @@
+name: code-review
+version: 1.0.0
+description: 2-stage code review process with spec compliance and code quality checks
+tier: 2
+tags:
+  - review
+  - quality
+  - validation
+  - collaboration
+  - best-practices
+
+source: Inspired by obra/superpowers requesting/receiving-code-review skills
+validated: false
+production_ready: false
+
+features:
+  - Two-stage review process (spec compliance + code quality)
+  - Review loops until approval
+  - Issue categorization (critical/major/minor)
+  - Blocker identification and tracking
+  - Structured review reports
+  - Integration with Ralph++ quality gates
+
+dependencies:
+  required: []
+  optional:
+    - tdd-mode
+
+prerequisites:
+  - Specification document exists (acceptance criteria defined)
+  - Code is committed to git
+  - Changes are reviewable
+
+usage_example: |
+  # Request code review
+  /code-review
+
+  # Or integrate with Ralph++
+  /ralph-loop --quality-gates
+
+  # Review workflow:
+  # 1. Stage 1: Check spec compliance
+  # 2. If FAIL: Fix issues, re-review
+  # 3. Stage 2: Check code quality
+  # 4. If FAIL: Fix issues, re-review
+  # 5. If PASS: Approved ✅
+
+quality_gates:
+  - Spec compliance verified
+  - All acceptance criteria met
+  - Code quality standards met
+  - No critical blockers remaining
+  - All review loops completed
+  - Tests passing

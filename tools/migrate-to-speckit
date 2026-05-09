@@ -1,0 +1,166 @@
+#!/usr/bin/env bash
+#
+# migrate-to-speckit — Migrate a Project-Forge child project to spec-kit
+#
+# Usage: ./tools/migrate-to-speckit [project-dir]
+#
+# What it does:
+#   1. Initialize spec-kit (specify init --ai claude --force)
+#   2. Migrate .speckit/ → .specify/ (constitution, specs)
+#   3. Install Project-Forge extensions
+#   4. Clean up old speckit-* commands from .claude/commands/
+#   5. Reinstall PF commands (with skill inlining)
+#
+# Prerequisites:
+#   - specify CLI installed (uv tool install specify-cli)
+#   - Project must be a git repo
+
+set -euo pipefail
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+FORGE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+info()    { echo -e "${BLUE}[info]${NC}  $*"; }
+success() { echo -e "${GREEN}[ok]${NC}    $*"; }
+warn()    { echo -e "${YELLOW}[warn]${NC}  $*"; }
+error()   { echo -e "${RED}[error]${NC} $*" >&2; }
+die()     { error "$@"; exit 1; }
+
+# ---------------------------------------------------------------------------
+# Parse args
+# ---------------------------------------------------------------------------
+PROJECT_DIR="${1:-.}"
+PROJECT_DIR="$(cd "$PROJECT_DIR" && pwd)"
+
+if [ ! -d "$PROJECT_DIR/.git" ]; then
+    die "Not a git repository: $PROJECT_DIR"
+fi
+
+if ! command -v specify &>/dev/null; then
+    die "specify CLI not found. Install: uv tool install specify-cli --from git+https://github.com/github/spec-kit.git@v0.3.2"
+fi
+
+echo -e "${BOLD}${BLUE}Migrating to spec-kit: ${PROJECT_DIR}${NC}"
+echo ""
+
+# ---------------------------------------------------------------------------
+# Step 1: Initialize spec-kit
+# ---------------------------------------------------------------------------
+if [ -d "$PROJECT_DIR/.specify" ]; then
+    info "spec-kit already initialized (.specify/ exists). Skipping init."
+else
+    info "Step 1: Initializing spec-kit..."
+    (cd "$PROJECT_DIR" && specify init . --ai claude --force 2>/dev/null) \
+        || die "specify init failed"
+    success "spec-kit initialized."
+fi
+
+# ---------------------------------------------------------------------------
+# Step 2: Migrate .speckit/ → .specify/
+# ---------------------------------------------------------------------------
+if [ -d "$PROJECT_DIR/.speckit" ]; then
+    info "Step 2: Migrating .speckit/ content..."
+
+    # Migrate constitution
+    if [ -f "$PROJECT_DIR/.speckit/constitution.yml" ] || [ -f "$PROJECT_DIR/.speckit/constitution.md" ]; then
+        mkdir -p "$PROJECT_DIR/.specify/memory"
+        if [ -f "$PROJECT_DIR/.speckit/constitution.md" ]; then
+            cp "$PROJECT_DIR/.speckit/constitution.md" "$PROJECT_DIR/.specify/memory/constitution.md"
+            success "constitution.md migrated to .specify/memory/"
+        elif [ -f "$PROJECT_DIR/.speckit/constitution.yml" ]; then
+            # Convert YAML to Markdown format
+            info "Converting constitution.yml to constitution.md..."
+            {
+                echo "# Project Constitution"
+                echo ""
+                echo "_Migrated from .speckit/constitution.yml_"
+                echo ""
+                cat "$PROJECT_DIR/.speckit/constitution.yml"
+            } > "$PROJECT_DIR/.specify/memory/constitution.md"
+            success "constitution.yml converted and migrated."
+        fi
+    fi
+
+    # Migrate features.json
+    if [ -f "$PROJECT_DIR/.speckit/features.json" ]; then
+        cp "$PROJECT_DIR/.speckit/features.json" "$PROJECT_DIR/.specify/features.json"
+        success "features.json migrated."
+    fi
+
+    # Note: specs/ directory stays in place (both systems use it)
+    info ".speckit/ kept as archive. Remove manually when confident: rm -rf .speckit/"
+else
+    info "Step 2: No .speckit/ directory found. Nothing to migrate."
+fi
+
+# ---------------------------------------------------------------------------
+# Step 3: Install PF extensions
+# ---------------------------------------------------------------------------
+info "Step 3: Installing Project-Forge extensions..."
+ext_count=0
+for ext_dir in "$FORGE_ROOT"/extensions/pf-*/; do
+    [ -d "$ext_dir" ] || continue
+    [ -f "$ext_dir/extension.yml" ] || continue
+    ext_name=$(basename "$ext_dir")
+
+    if (cd "$PROJECT_DIR" && specify extension add "$ext_dir" --dev 2>/dev/null); then
+        ext_count=$((ext_count + 1))
+    else
+        warn "Failed to install $ext_name"
+    fi
+done
+success "$ext_count extensions installed."
+
+# ---------------------------------------------------------------------------
+# Step 4: Clean up old speckit-* commands
+# ---------------------------------------------------------------------------
+info "Step 4: Cleaning up old speckit-* commands..."
+removed=0
+for old_cmd in "$PROJECT_DIR"/.claude/commands/speckit-*.md; do
+    [ -f "$old_cmd" ] || continue
+    rm "$old_cmd"
+    removed=$((removed + 1))
+done
+if [ $removed -gt 0 ]; then
+    success "Removed $removed old speckit-* command stubs."
+else
+    info "No old speckit-* commands to clean up."
+fi
+
+# ---------------------------------------------------------------------------
+# Step 5: Reinstall PF commands
+# ---------------------------------------------------------------------------
+info "Step 5: Reinstalling Project-Forge commands..."
+mkdir -p "$PROJECT_DIR/.claude/commands"
+
+# Source the install_commands function from bootstrap
+# shellcheck source=/dev/null
+source <(sed -n '/^install_commands()/,/^}/p' "$FORGE_ROOT/tools/bootstrap")
+install_commands "$FORGE_ROOT" "$PROJECT_DIR"
+success "PF commands reinstalled."
+
+# ---------------------------------------------------------------------------
+# Summary
+# ---------------------------------------------------------------------------
+echo ""
+echo -e "${GREEN}${BOLD}Migration complete!${NC}"
+echo ""
+echo "What changed:"
+echo "  - .specify/ initialized (spec-kit v0.3.2+)"
+[ -d "$PROJECT_DIR/.speckit" ] && echo "  - .speckit/ content migrated to .specify/"
+echo "  - $ext_count PF extensions installed"
+echo "  - Old command stubs cleaned up"
+echo "  - PF commands reinstalled"
+echo ""
+echo "Next steps:"
+echo "  - Verify: specify extension list"
+echo "  - Test: run your usual workflow"
+echo "  - Clean up: rm -rf .speckit/ (when confident)"
+echo "  - Update .gitignore: add .specify/extensions/.cache/"

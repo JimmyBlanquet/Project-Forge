@@ -1,0 +1,30 @@
+{
+  "name": "@project-forge/rate-limiting-persistent",
+  "version": "1.0.0",
+  "description": "Persistent rate limiting using PostgreSQL/Supabase with automatic fallback",
+  "main": "src/index.ts",
+  "types": "src/types.ts",
+  "scripts": {
+    "test": "vitest",
+    "test:coverage": "vitest --coverage"
+  },
+  "keywords": [
+    "rate-limiting-persistent",
+    "core",
+    "tier-1"
+  ],
+  "author": "Project Forge",
+  "license": "MIT",
+  "peerDependencies": {
+    "next": "^14.0.0",
+    "@supabase/supabase-js": "^2.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.6",
+    "next": "^14.2.15",
+    "@supabase/supabase-js": "^2.39.0",
+    "typescript": "^5.3.3",
+    "vitest": "^1.1.0",
+    "@vitest/coverage-v8": "^1.1.0"
+  }
+}

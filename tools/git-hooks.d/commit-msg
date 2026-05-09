@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Blocks Ralph++ story commits when quality gate fails.
+# Installed by tools/bootstrap into .git/hooks/ of child projects.
+#
+# Pattern matched: "Story N/N:" in commit message body.
+# If matched and quality gate exits non-zero → exit 1 (commit blocked).
+# Optional Discord alert via DISCORD_RALPH_WEBHOOK env var.
+
+MSG=$(cat "$1")
+
+# Only enforce on Ralph++ story commits
+if ! echo "$MSG" | grep -qE 'Story [0-9]+/[0-9]+:'; then
+    exit 0
+fi
+
+# Resolve quality gate from active ralph++ session, fall back to safe default
+QUALITY_GATE=""
+if [ -d ".ralph++/sessions" ]; then
+    SESSION=$(ls -t .ralph++/sessions/ 2>/dev/null | head -1)
+    if [ -n "$SESSION" ] && [ -f ".ralph++/sessions/$SESSION/prd.json" ]; then
+        QUALITY_GATE=$(jq -r '.config.qualityGates.command // ""' \
+            ".ralph++/sessions/$SESSION/prd.json" 2>/dev/null || echo "")
+    fi
+fi
+[ -z "$QUALITY_GATE" ] && QUALITY_GATE="npx tsc --noEmit && npx vitest run"
+
+STORY=$(echo "$MSG" | grep -oE 'Story [0-9]+/[0-9]+' | head -1)
+echo "🔍 Ralph++ guard: running quality gate for ${STORY}..."
+
+GATE_OUTPUT=$(mktemp)
+if eval "$QUALITY_GATE" > "$GATE_OUTPUT" 2>&1; then
+    echo "✅ Quality gate passed — commit allowed"
+    rm -f "$GATE_OUTPUT"
+    exit 0
+fi
+
+echo "" >&2
+echo "❌ BLOCKED: quality gate failed on ${STORY}" >&2
+echo "   Fix the errors below, then re-commit." >&2
+echo "" >&2
+tail -40 "$GATE_OUTPUT" >&2
+rm -f "$GATE_OUTPUT"
+
+# Optional Discord notification (set DISCORD_RALPH_WEBHOOK in your env)
+if [ -n "${DISCORD_RALPH_WEBHOOK:-}" ]; then
+    PROJECT=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")
+    curl -sf -X POST "$DISCORD_RALPH_WEBHOOK" \
+        -H "Content-Type: application/json" \
+        -d "{\"content\":\"❌ Ralph++ blocked commit on \`${PROJECT}\`: quality gate failed on \`${STORY}\`\"}" \
+        > /dev/null 2>&1 || true
+fi
+
+exit 1

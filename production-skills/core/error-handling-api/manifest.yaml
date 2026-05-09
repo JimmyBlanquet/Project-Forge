@@ -1,0 +1,46 @@
+name: error-handling-api
+version: 1.0.0
+description: Centralized API error handling with user-friendly messages and consistent responses
+category: core
+tier: 1
+author: Project Forge
+tags:
+  - error-handling
+  - api
+  - nextjs
+  - rest
+  - production-ready
+  - typescript
+dependencies:
+  next: latest
+  "@/lib": latest
+exports:
+  - name: apiError
+    type: function
+    description: Create a standardized error response
+  - name: apiSuccess
+    type: function
+    description: Create success response with consistent format
+  - name: withErrorHandler
+    type: function
+    description: Wrap async route handler with error catching
+  - name: API_ERROR
+    type: const
+  - name: ApiErrorCode
+    type: type
+  - name: ApiErrorResponse
+    type: interface
+usage:
+  install:
+    - npm install @project-forge/skills
+    - // or copy to production-skills/core/error-handling-api/
+  example: |-
+    import { apiError } from '@project-forge/skills/error-handling-api'
+
+    // Use the apiError function
+    const result = await apiError(...)
+files:
+  - src/**/*
+  - README.md
+  - manifest.yaml
+lastUpdated: 2026-01-16T18:23:14.358Z

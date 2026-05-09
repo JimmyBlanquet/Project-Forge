@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json.schemastore.org/eslintrc",
+  "root": true,
+  "extends": [
+    "next/core-web-vitals",
+    "prettier",
+    "plugin:tailwindcss/recommended",
+    "plugin:sonarjs/recommended-legacy"
+  ],
+  "plugins": ["tailwindcss", "sonarjs"],
+  "rules": {
+    "@next/next/no-html-link-for-pages": "off",
+    "react/jsx-key": "off",
+    "tailwindcss/no-custom-classname": "off",
+    "tailwindcss/classnames-order": "error",
+    "sonarjs/cognitive-complexity": ["warn", 15],
+    "sonarjs/no-duplicate-string": ["warn", { "threshold": 5 }],
+    "no-restricted-imports": ["error", {
+      "patterns": [
+        {
+          "group": ["@prisma/client", "prisma", "prisma/*"],
+          "message": "DB access is forbidden in components. Use API routes or server actions."
+        }
+      ]
+    }]
+  },
+  "settings": {
+    "tailwindcss": {
+      "callees": ["cn"],
+      "config": "tailwind.config.ts"
+    },
+    "next": {
+      "rootDir": true
+    }
+  },
+  "overrides": [
+    {
+      "files": ["*.ts", "*.tsx"],
+      "parser": "@typescript-eslint/parser"
+    },
+    {
+      "files": ["app/api/**/*.ts", "lib/**/*.ts", "actions/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    }
+  ]
+}

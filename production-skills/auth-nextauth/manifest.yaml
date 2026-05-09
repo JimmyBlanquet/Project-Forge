@@ -1,0 +1,57 @@
+name: auth-nextauth
+version: 1.0.0
+description: Auth.js v5 integration with Prisma adapter, OAuth providers, and role-based access control
+tier: 1
+tags:
+  - authentication
+  - auth.js
+  - nextauth
+  - oauth
+  - rbac
+  - prisma
+
+source_project: starters/saas-base
+validated: true
+production_ready: true
+
+tech_stack:
+  - next-auth@5.0.0-beta.19
+  - @auth/prisma-adapter@^2.4.1
+  - @prisma/client@^5.17.0
+
+features:
+  - OAuth providers (Google, GitHub configurable)
+  - Magic link authentication via Resend
+  - JWT session strategy
+  - Prisma database adapter
+  - Role-based access control (RBAC)
+  - Session callbacks with user role injection
+  - Protected routes via middleware
+  - TypeScript module augmentation for session typing
+
+dependencies:
+  required:
+    - database-neon # Needs Prisma schema with User, Account, Session, VerificationToken
+  optional:
+    - email-resend # For magic link emails
+
+prerequisites:
+  - Next.js 14+ with App Router
+  - Prisma configured with PostgreSQL database
+  - Environment variables configured
+
+usage_example: |
+  # In route handler or component
+  import { auth } from "@/auth"
+
+  const session = await auth()
+  if (!session) redirect("/login")
+
+  // Access user role
+  const isAdmin = session.user.role === "ADMIN"
+
+quality_gates:
+  - TypeScript strict mode compatibility
+  - No auth-related errors in build
+  - Session type augmentation working
+  - OAuth redirect URLs configured

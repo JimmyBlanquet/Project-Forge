@@ -1,0 +1,63 @@
+name: auth-supabase-complete
+version: 1.0.0
+category: core
+tier: 1
+description: Production-ready Supabase authentication for Next.js with TypeScript
+
+features:
+  - Browser and server-side Supabase clients
+  - Server Component support with Next.js cookies
+  - API Route Handler client with request/response cookies
+  - Service role client for admin operations
+  - requireAuth and requireAdminAuth middleware
+  - Session management utilities
+  - Route matching for public/protected routes
+  - Full TypeScript support
+  - Zero hard-coded dependencies
+
+tech_stack:
+  - Next.js 14+
+  - Supabase
+  - TypeScript
+  - @supabase/ssr
+  - @supabase/supabase-js
+
+use_cases:
+  - SaaS applications with user authentication
+  - Multi-tenant platforms
+  - Admin dashboards with role-based access
+  - E-commerce platforms
+  - Content management systems
+  - Membership sites
+
+installation:
+  npm: npm install @supabase/ssr @supabase/supabase-js
+  dependencies:
+    - "@supabase/ssr": "^0.5.0"
+    - "@supabase/supabase-js": "^2.0.0"
+    - "next": "^14.0.0"
+
+complexity: 3/10
+loc: ~350
+exports: 15
+
+validation:
+  - Validated on production B2B SaaS
+  - Used in production with 1000+ users
+  - Tested with email and OAuth providers
+  - RLS patterns proven in multi-tenant environment
+
+patterns:
+  - Server Components with cookies
+  - API Route Handlers with request cookies
+  - Service role for admin operations
+  - Route protection middleware
+  - Session refresh in middleware
+  - Profile fetching patterns
+
+notes:
+  - Requires Supabase project setup
+  - Assumes profiles table with user.id foreign key
+  - Compatible with Supabase Auth UI
+  - Works with all Supabase auth providers
+  - Supports custom auth flows

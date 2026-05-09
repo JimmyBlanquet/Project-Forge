@@ -1,0 +1,54 @@
+name: tdd-mode
+version: 1.0.0
+description: Test-Driven Development workflow with RED-GREEN-REFACTOR cycle
+tier: 2
+tags:
+  - testing
+  - tdd
+  - development
+  - quality
+  - best-practices
+
+source: Inspired by obra/superpowers test-driven-development skill
+validated: false
+production_ready: false
+
+features:
+  - RED-GREEN-REFACTOR cycle enforcement
+  - Write test before code
+  - Verify test fails then passes
+  - Minimal implementation approach
+  - Edge case coverage
+  - No production code without test
+
+dependencies:
+  required: []
+  optional: []
+
+prerequisites:
+  - Testing framework installed (pytest, jest, vitest, etc.)
+  - Test files structure defined
+  - Understanding of project testing conventions
+
+usage_example: |
+  # Activate TDD mode for current session
+  /tdd-mode
+
+  # Or integrate with Ralph++
+  /ralph-loop --tdd
+
+  # Example workflow:
+  # 1. Write failing test
+  # 2. Run test, verify RED
+  # 3. Implement minimal code
+  # 4. Run test, verify GREEN
+  # 5. Refactor if needed
+  # 6. Commit
+
+quality_gates:
+  - Every new function has a test
+  - Tests fail before implementation
+  - Tests pass after implementation
+  - Edge cases covered
+  - Error conditions tested
+  - No production code without corresponding test

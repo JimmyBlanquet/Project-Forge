@@ -1,0 +1,27 @@
+name: ralph-loop
+version: 1.0.0
+description: Autonomous skill implementation using fresh context agents
+category: core
+author: Ralph++ Team
+
+command:
+  name: ralph-loop
+  description: Autonomously implement all stories in a skill using fresh agents
+  arguments:
+    - name: skill-name
+      description: Name of the skill to implement (e.g., config-centralization)
+      required: true
+    - name: session-id
+      description: Ralph++ session ID (optional, will use latest if not provided)
+      required: false
+
+capabilities:
+  - task_spawning
+  - filesystem_access
+  - git_operations
+
+tags:
+  - autonomous
+  - orchestrator
+  - ralph
+  - fresh-context

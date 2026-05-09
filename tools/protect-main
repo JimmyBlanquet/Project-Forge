@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+#
+# Configure GitHub branch protection for main branch.
+# Requires: gh CLI authenticated with admin access.
+#
+# Usage: ./tools/protect-main [owner/repo]
+#   If no argument, auto-detects from current git remote.
+#
+# What it does:
+#   - Requires PR (no direct push to main)
+#   - Requires CI Gate status check to pass
+#   - Requires branch to be up-to-date before merge
+#   - Enforces for admins too
+
+set -euo pipefail
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+info()    { echo -e "${BLUE}[info]${NC}  $*"; }
+success() { echo -e "${GREEN}[ok]${NC}    $*"; }
+error()   { echo -e "${RED}[error]${NC} $*" >&2; exit 1; }
+
+# Detect repo
+if [ -n "${1:-}" ]; then
+    REPO="$1"
+else
+    REPO=$(gh repo view --json nameWithOwner -q '.nameWithOwner' 2>/dev/null) \
+        || error "Could not detect repo. Pass owner/repo as argument or run from a git repo."
+fi
+
+info "Configuring branch protection for ${BOLD}${REPO}${NC} (main)..."
+
+gh api "repos/${REPO}/branches/main/protection" \
+    --method PUT \
+    --input - <<'JSON'
+{
+  "required_status_checks": {
+    "strict": true,
+    "contexts": ["CI Gate"]
+  },
+  "enforce_admins": true,
+  "required_pull_request_reviews": {
+    "required_approving_review_count": 0,
+    "dismiss_stale_reviews": true
+  },
+  "restrictions": null
+}
+JSON
+
+success "Branch protection configured for ${BOLD}main${NC}:"
+echo ""
+echo "  - PR required (no direct push)"
+echo "  - CI Gate must pass before merge"
+echo "  - Branch must be up-to-date with main"
+echo "  - Enforced for admins too"
+
+# Enable auto-merge on the repo (required for --auto-merge in Ralph++)
+info "Enabling auto-merge on repo..."
+if gh api "repos/${REPO}" --method PATCH --field allow_auto_merge=true > /dev/null 2>&1; then
+    success "Auto-merge enabled (for Ralph++ --auto-merge)"
+else
+    echo -e "  ${RED}Could not enable auto-merge. Enable manually in repo Settings > General > Allow auto-merge${NC}"
+fi
+
+echo ""
+echo -e "  Verify: ${BLUE}https://github.com/${REPO}/settings/branches${NC}"

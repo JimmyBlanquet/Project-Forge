@@ -1,0 +1,52 @@
+name: payments-stripe
+version: 1.0.0
+description: Stripe subscription payments with checkout, webhooks, customer portal, and subscription management
+tier: 1
+tags:
+  - payments
+  - stripe
+  - subscriptions
+  - webhooks
+  - billing
+
+source_project: starters/saas-base
+validated: true
+production_ready: true
+
+tech_stack:
+  - stripe@^15.12.0
+  - @prisma/client@^5.17.0
+
+features:
+  - Stripe Checkout for subscription creation
+  - Webhook handling for checkout.session.completed and invoice.payment_succeeded
+  - Customer portal for subscription management
+  - Multiple pricing plans (monthly/yearly)
+  - Subscription status tracking in database
+  - Server actions for checkout and portal redirect
+
+dependencies:
+  required:
+    - database-neon # Needs User model with Stripe fields
+  optional:
+    - auth-nextauth # For user authentication
+
+prerequisites:
+  - Next.js 14+ with App Router
+  - Prisma configured with User model
+  - Stripe account with products/prices created
+  - Environment variables configured
+
+usage_example: |
+  # Server Action
+  import { generateUserStripe } from "@/actions/generate-user-stripe"
+
+  <form action={() => generateUserStripe(priceId)}>
+    <button>Subscribe</button>
+  </form>
+
+quality_gates:
+  - Webhook endpoint responds with 200 OK
+  - Subscription data saved to database
+  - Customer portal redirects correctly
+  - TypeScript strict mode compatibility

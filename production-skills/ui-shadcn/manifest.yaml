@@ -1,0 +1,54 @@
+name: ui-shadcn
+version: 1.0.0
+description: shadcn/ui component library setup with Tailwind CSS, Radix UI primitives, and customizable themes
+tier: 2
+tags:
+  - ui
+  - components
+  - shadcn
+  - radix-ui
+  - tailwind
+  - theming
+
+source_project: starters/saas-base
+validated: true
+production_ready: true
+
+tech_stack:
+  - shadcn/ui (Radix UI primitives)
+  - tailwind-merge@^2.4.0
+  - tailwindcss-animate@^1.0.7
+  - class-variance-authority@^0.7.0
+  - "@radix-ui/react-*" (multiple packages)
+
+features:
+  - 40+ pre-built accessible components
+  - Dark mode support with next-themes
+  - CSS variables for theming
+  - Tailwind CSS integration
+  - TypeScript support
+  - Customizable via components.json
+  - Copy-paste component architecture
+
+dependencies:
+  required: []
+  optional:
+    - next-themes # For dark mode support
+
+prerequisites:
+  - Next.js 14+ with App Router
+  - Tailwind CSS configured
+  - TypeScript configured
+
+usage_example: |
+  import { Button } from "@/components/ui/button"
+
+  <Button variant="default">Click me</Button>
+  <Button variant="outline">Outline</Button>
+  <Button variant="ghost">Ghost</Button>
+
+quality_gates:
+  - Tailwind CSS compiles without errors
+  - Components render correctly
+  - Dark mode toggle works
+  - TypeScript types are correct

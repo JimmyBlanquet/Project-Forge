@@ -1,0 +1,22 @@
+[
+  {"id": 1, "query": "hey can you scan the code quality of this project? i want to know if there's any duplication or dead code before I push to main", "should_trigger": true},
+  {"id": 2, "query": "run jscpd on the project, I think there's a lot of copy-paste in the components folder and I want to see the duplication rate", "should_trigger": true},
+  {"id": 3, "query": "I just finished implementing the posts CRUD feature. Can you check if I left any unused exports or dead dependencies behind? knip should catch that", "should_trigger": true},
+  {"id": 4, "query": "the codebase feels messy after 3 weeks of rapid development. can you give me a quality report? cognitive complexity, duplicates, unused stuff — the works", "should_trigger": true},
+  {"id": 5, "query": "is there any dead code in my project? I've been refactoring and I'm worried there are leftover exports nobody uses anymore", "should_trigger": true},
+  {"id": 6, "query": "j'ai l'impression qu'on a beaucoup de copier-coller dans le code, surtout dans les server actions. tu peux vérifier avec jscpd ou un truc du genre ?", "should_trigger": true},
+  {"id": 7, "query": "before we merge this feature branch, run a quality scan on just the modified files to make sure we're not introducing tech debt", "should_trigger": true},
+  {"id": 8, "query": "generate a quality-report.md for the whole project — I need to share the code health status with the team", "should_trigger": true},
+  {"id": 9, "query": "check how clean the codebase is. I want to know duplication percentage, any unused deps, and if there are functions that are too complex", "should_trigger": true},
+  {"id": 10, "query": "lance les outils de qualité sur tout le projet et génère moi un rapport avec le statut PASS/WARN/FAIL", "should_trigger": true},
+  {"id": 11, "query": "write unit tests for the auth module — I need tests for the login, signup, and password reset flows using vitest", "should_trigger": false},
+  {"id": 12, "query": "deploy the app to production on vercel, make sure the environment variables are set correctly", "should_trigger": false},
+  {"id": 13, "query": "there's a bug where users can't sign in with Google OAuth — the callback URL seems wrong. can you fix it?", "should_trigger": false},
+  {"id": 14, "query": "run eslint on this file and fix all the errors automatically — I want you to actually change the code, not just report problems", "should_trigger": false},
+  {"id": 15, "query": "this function has too many nested ifs, can you refactor it to reduce the complexity? maybe extract some helper functions", "should_trigger": false},
+  {"id": 16, "query": "review this pull request for code quality issues — check the diff on GitHub and leave comments on anything that looks wrong", "should_trigger": false},
+  {"id": 17, "query": "run the E2E tests with agent-browser to check if the user registration flow works end to end on localhost:3000", "should_trigger": false},
+  {"id": 18, "query": "I need to add a new API endpoint for user profiles at /api/users/[id] with GET and PATCH methods", "should_trigger": false},
+  {"id": 19, "query": "can you look at the eslint config and add the no-console rule? I keep accidentally leaving console.logs in production code", "should_trigger": false},
+  {"id": 20, "query": "generate a recette checklist from the spec to validate that the posts feature meets all acceptance criteria", "should_trigger": false}
+]

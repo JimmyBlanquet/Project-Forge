@@ -1,0 +1,1119 @@
+#!/usr/bin/env bash
+#
+# Ralph++ Autonomous Implementation Loop
+# Reads prd.json, spawns fresh claude -p agents per story, verifies quality gates,
+# commits atomically, loops until all stories complete.
+# Supports parallel execution of independent stories.
+#
+# Usage:
+#   ./tools/ralph [options]
+#
+# Options:
+#   --session <id>        Session ID (default: latest in .ralph++/sessions/)
+#   --model <model>       Claude model to use (default: sonnet)
+#   --max-retries <n>     Max retries per story (default: 3)
+#   --max-budget <usd>    Max budget per story in USD (default: 2.00)
+#   --dry-run             Show what would be done without executing
+#   --no-parallel         Disable parallel execution (run sequentially)
+#   --no-branch           Skip feature branch creation (commit on current branch)
+#   --no-pr               Skip PR creation at the end
+#   --auto-merge          Enable auto-merge (squash) when CI passes
+#   -h, --help            Show this help
+
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# Colors
+# ---------------------------------------------------------------------------
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+MAGENTA='\033[0;35m'
+BOLD='\033[1m'
+DIM='\033[2m'
+NC='\033[0m'
+
+# ---------------------------------------------------------------------------
+# Defaults
+# ---------------------------------------------------------------------------
+SESSION_ID=""
+MODEL="sonnet"
+MAX_RETRIES=3
+MAX_BUDGET="2.00"
+DRY_RUN=false
+NO_PARALLEL=false
+NO_BRANCH=false
+NO_PR=false
+AUTO_MERGE=false
+CODE_REVIEW=true
+PROJECT_ROOT=""
+FEATURE_BRANCH=""
+BASE_BRANCH=""
+
+# Track retries per story (associative array)
+declare -A STORY_RETRIES
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+info()    { echo -e "${BLUE}[ralph]${NC}  $*"; }
+success() { echo -e "${GREEN}[ralph]${NC}  $*"; }
+warn()    { echo -e "${YELLOW}[ralph]${NC}  $*"; }
+error()   { echo -e "${RED}[ralph]${NC}  $*" >&2; }
+die()     { error "$@"; exit 1; }
+dim()     { echo -e "${DIM}$*${NC}"; }
+parallel_info() { echo -e "${MAGENTA}[ralph]${NC}  $*"; }
+
+# ---------------------------------------------------------------------------
+# Parse arguments
+# ---------------------------------------------------------------------------
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --session)   SESSION_ID="$2"; shift 2 ;;
+            --model)     MODEL="$2"; shift 2 ;;
+            --max-retries) MAX_RETRIES="$2"; shift 2 ;;
+            --max-budget)  MAX_BUDGET="$2"; shift 2 ;;
+            --dry-run)   DRY_RUN=true; shift ;;
+            --no-parallel) NO_PARALLEL=true; shift ;;
+            --no-branch) NO_BRANCH=true; shift ;;
+            --no-pr)     NO_PR=true; shift ;;
+            --auto-merge) AUTO_MERGE=true; shift ;;
+            --no-review) CODE_REVIEW=false; shift ;;
+            --base)      BASE_BRANCH="$2"; shift 2 ;;
+            -h|--help)   usage; exit 0 ;;
+            *)           die "Unknown option: $1 (see --help)" ;;
+        esac
+    done
+}
+
+usage() {
+    echo "Usage: $(basename "$0") [options]"
+    echo ""
+    echo "Ralph++ Autonomous Implementation Loop"
+    echo "Spawns fresh Claude agents per story from prd.json"
+    echo "Runs independent stories in parallel when possible"
+    echo ""
+    echo "Options:"
+    echo "  --session <id>        Session ID (default: latest)"
+    echo "  --model <model>       Claude model (default: sonnet)"
+    echo "  --max-retries <n>     Max retries per story (default: 3)"
+    echo "  --max-budget <usd>    Budget per story in USD (default: 2.00)"
+    echo "  --dry-run             Show plan without executing"
+    echo "  --no-parallel         Disable parallel execution"
+    echo "  --no-branch           Skip feature branch creation (commit on current branch)"
+    echo "  --no-pr               Skip PR creation at the end"
+    echo "  --auto-merge          Enable auto-merge (squash) when CI passes"
+    echo "  --no-review           Skip code review after PR creation"
+    echo "  --base <branch>       PR base branch (default: auto-detect staging or main)"
+    echo "  -h, --help            Show this help"
+}
+
+# ---------------------------------------------------------------------------
+# Detect base branch (staging or main)
+# ---------------------------------------------------------------------------
+detect_base_branch() {
+    if [[ -n "$BASE_BRANCH" ]]; then
+        info "Base:     ${BOLD}${BASE_BRANCH}${NC} (explicit --base)"
+        return
+    fi
+
+    # Auto-detect: staging branch on remote + e2e-staging workflow exists
+    local has_staging_branch=false
+    local has_staging_workflow=false
+
+    if (cd "$PROJECT_ROOT" && git ls-remote --heads origin staging 2>/dev/null | grep -q staging); then
+        has_staging_branch=true
+    fi
+
+    if [[ -f "$PROJECT_ROOT/.github/workflows/e2e-staging.yml" ]]; then
+        has_staging_workflow=true
+    fi
+
+    if $has_staging_branch && $has_staging_workflow; then
+        BASE_BRANCH="staging"
+        info "Base:     ${BOLD}staging${NC} (3-stage pipeline detected)"
+    else
+        BASE_BRANCH="main"
+        info "Base:     ${BOLD}main${NC}"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Create feature branch
+# ---------------------------------------------------------------------------
+create_feature_branch() {
+    if $NO_BRANCH; then
+        FEATURE_BRANCH=$(cd "$PROJECT_ROOT" && git branch --show-current)
+        info "Branch:   ${BOLD}${FEATURE_BRANCH}${NC} (--no-branch, staying on current)"
+        return
+    fi
+
+    # Slugify project name for branch name
+    local slug
+    slug=$(echo "$PROJECT_NAME" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
+    FEATURE_BRANCH="feat/${slug}"
+
+    local current_branch
+    current_branch=$(cd "$PROJECT_ROOT" && git branch --show-current)
+
+    if [[ "$current_branch" == "$FEATURE_BRANCH" ]]; then
+        info "Branch:   ${BOLD}${FEATURE_BRANCH}${NC} (already on it)"
+        return
+    fi
+
+    # Check if branch already exists
+    if (cd "$PROJECT_ROOT" && git show-ref --verify --quiet "refs/heads/$FEATURE_BRANCH" 2>/dev/null); then
+        info "Branch:   ${BOLD}${FEATURE_BRANCH}${NC} (existing, switching to it)"
+        (cd "$PROJECT_ROOT" && git checkout "$FEATURE_BRANCH" 2>/dev/null)
+    else
+        info "Branch:   ${BOLD}${FEATURE_BRANCH}${NC} (creating from ${current_branch})"
+        (cd "$PROJECT_ROOT" && git checkout -b "$FEATURE_BRANCH" 2>/dev/null)
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Push branch and create PR
+# ---------------------------------------------------------------------------
+push_and_create_pr() {
+    if $NO_PR || $NO_BRANCH; then
+        return
+    fi
+
+    local completed
+    completed=$(count_completed)
+    if [[ "$completed" -eq 0 ]]; then
+        warn "No stories completed — skipping PR creation"
+        return
+    fi
+
+    info "Pushing branch ${BOLD}${FEATURE_BRANCH}${NC}..."
+
+    # Push the branch
+    if ! (cd "$PROJECT_ROOT" && git push -u origin "$FEATURE_BRANCH" 2>/dev/null); then
+        warn "Could not push branch (no remote or auth issue). Create PR manually."
+        return
+    fi
+
+    # Check if PR already exists
+    local existing_pr
+    existing_pr=$(cd "$PROJECT_ROOT" && gh pr list --head "$FEATURE_BRANCH" --json number -q '.[0].number' 2>/dev/null || true)
+    if [[ -n "$existing_pr" ]]; then
+        info "PR #${existing_pr} already exists for ${FEATURE_BRANCH}"
+        return
+    fi
+
+    # Create PR
+    info "Creating PR..."
+    local pr_title="feat: ${PROJECT_NAME}"
+    local pr_body
+    pr_body=$(cat <<PRBODY
+## Summary
+
+Autonomous implementation of **${PROJECT_NAME}** via Ralph++.
+
+- Stories: ${completed}/${TOTAL_STORIES} completed
+- Session: ${SESSION_ID}
+- Target: ${BASE_BRANCH}
+
+## Test plan
+
+- [ ] Verify Vercel preview deployment works
+- [ ] Review code changes
+- [ ] Confirm CI passes (lint, tests, build)
+
+Generated by Ralph++ autonomous loop
+PRBODY
+)
+
+    local pr_url
+    if pr_url=$(cd "$PROJECT_ROOT" && gh pr create \
+        --base "$BASE_BRANCH" \
+        --head "$FEATURE_BRANCH" \
+        --title "$pr_title" \
+        --body "$pr_body" 2>/dev/null); then
+        success "PR created: ${BOLD}${pr_url}${NC}"
+        info "Vercel will deploy a preview automatically."
+
+        if $AUTO_MERGE; then
+            info "Enabling auto-merge (squash)..."
+            if (cd "$PROJECT_ROOT" && gh pr merge "$FEATURE_BRANCH" --auto --squash --delete-branch 2>/dev/null); then
+                success "Auto-merge enabled — PR will merge automatically when CI Gate passes."
+            else
+                warn "Could not enable auto-merge. Enable it manually or check repo settings."
+                info "  gh pr merge $FEATURE_BRANCH --auto --squash --delete-branch"
+            fi
+        else
+            info "Merge after CI is green (or use --auto-merge for hands-free)."
+        fi
+        # Run code review on the PR
+        run_code_review
+    else
+        warn "Could not create PR. Create it manually:"
+        info "  gh pr create --base $BASE_BRANCH --head $FEATURE_BRANCH"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Run code review on PR
+# ---------------------------------------------------------------------------
+run_code_review() {
+    if ! $CODE_REVIEW; then
+        return
+    fi
+
+    if ! command -v claude &>/dev/null; then
+        warn "claude CLI not found — skipping code review"
+        return
+    fi
+
+    info "Running code review on ${BOLD}${FEATURE_BRANCH}${NC}..."
+    if (cd "$PROJECT_ROOT" && claude -p "/code-review --comment" \
+        --allowedTools "Read Glob Grep Bash" \
+        --dangerously-skip-permissions \
+        > /dev/null 2>&1); then
+        success "Code review posted to PR."
+    else
+        warn "Code review failed or timed out. Review manually."
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Find session
+# ---------------------------------------------------------------------------
+find_session() {
+    if [[ -n "$SESSION_ID" ]]; then
+        SESSION_DIR=".ralph++/sessions/$SESSION_ID"
+    else
+        if [[ ! -d ".ralph++/sessions" ]]; then
+            die "No .ralph++/sessions/ directory found. Run /speckit-convert first."
+        fi
+        SESSION_ID=$(ls -t .ralph++/sessions/ 2>/dev/null | head -1)
+        if [[ -z "$SESSION_ID" ]]; then
+            die "No sessions found. Run /speckit-convert first."
+        fi
+        SESSION_DIR=".ralph++/sessions/$SESSION_ID"
+    fi
+
+    PRD_FILE="$SESSION_DIR/prd.json"
+    PROGRESS_FILE="$SESSION_DIR/progress.txt"
+
+    [[ -f "$PRD_FILE" ]] || die "prd.json not found at $PRD_FILE"
+    [[ -f "$PROGRESS_FILE" ]] || die "progress.txt not found at $PROGRESS_FILE"
+
+    # Load config from PRD
+    PROJECT_ROOT=$(jq -r '.config.projectRoot' "$PRD_FILE")
+    PROJECT_NAME=$(jq -r '.projectName' "$PRD_FILE")
+    QUALITY_GATE=$(jq -r '.config.qualityGates.command // .config.qualityGates.typecheck // "npx tsc --noEmit && npx next lint && npx vitest run && npm run quality:jscpd && npm run quality:knip"' "$PRD_FILE")
+    CONSTITUTION_PATH=$(jq -r '.config.constitutionPath' "$PRD_FILE")
+    PLAN_PATH=$(jq -r '.config.planPath' "$PRD_FILE")
+    TOTAL_STORIES=$(jq '.stories | length' "$PRD_FILE")
+}
+
+# ---------------------------------------------------------------------------
+# Count completed stories
+# ---------------------------------------------------------------------------
+count_completed() {
+    jq '[.stories[] | select(.passes == true)] | length' "$PRD_FILE"
+}
+
+# ---------------------------------------------------------------------------
+# Find ALL ready stories (dependency-aware)
+# ---------------------------------------------------------------------------
+find_ready_stories() {
+    # Returns all story IDs whose dependencies are satisfied, sorted by id
+    jq -r '
+        .stories as $all |
+        [.stories[] | select(.passes == false)] |
+        map(select(
+            .dependencies as $deps |
+            ($deps | length == 0) or
+            ($deps | all(. as $dep | $all[] | select(.id == $dep) | .passes))
+        )) |
+        sort_by(.id) |
+        .[].id
+    ' "$PRD_FILE"
+}
+
+# ---------------------------------------------------------------------------
+# Get story details as JSON
+# ---------------------------------------------------------------------------
+get_story() {
+    local story_id="$1"
+    jq ".stories[] | select(.id == $story_id)" "$PRD_FILE"
+}
+
+# ---------------------------------------------------------------------------
+# Build agent prompt
+# ---------------------------------------------------------------------------
+build_prompt() {
+    local story_id="$1"
+    local work_dir="${2:-$PROJECT_ROOT}"
+    local story_json
+    story_json=$(get_story "$story_id")
+
+    local title description files_affected criteria
+    title=$(echo "$story_json" | jq -r '.title')
+    description=$(echo "$story_json" | jq -r '.description')
+    files_affected=$(echo "$story_json" | jq -r '.filesAffected[]' | sed 's/^/- /')
+    criteria=$(echo "$story_json" | jq -r '.acceptanceCriteria[]' | sed 's/^/- [ ] /')
+    local progress
+    progress=$(cat "$PROGRESS_FILE")
+
+    cat <<PROMPT
+You are a Ralph++ implementation agent with fresh context.
+Your ONLY source of truth is the filesystem.
+
+## Project Context
+
+**Project root:** $work_dir
+**Constitution:** Read $CONSTITUTION_PATH for coding principles.
+**Plan:** Read $PLAN_PATH for architecture decisions.
+
+## Your Task (ONE Story Only)
+
+**Story $story_id: $title**
+
+$description
+
+**Files to create/modify:**
+$files_affected
+
+**Acceptance Criteria:**
+$criteria
+
+## Learnings from Previous Agents
+
+$progress
+
+## Implementation Steps
+
+1. Read the files listed above (or their dependencies if they don't exist yet)
+2. Read any imports, types, existing patterns they depend on
+3. Implement the changes described
+4. Verify ALL acceptance criteria are met
+5. Run quality gate: $QUALITY_GATE
+6. Fix any errors until quality gate passes
+
+## Quality Gate
+
+After implementation, run:
+cd $work_dir && $QUALITY_GATE
+
+This MUST pass with zero errors before you're done.
+
+## DO NOT
+
+- Do NOT commit (the orchestrator handles commits)
+- Do NOT implement other stories (ONE story only)
+- Do NOT modify prd.json or progress.txt
+- Do NOT modify or delete any file in tests/speckit/ — these are spec-driven tests that YOU must make pass by implementing the correct code. If a test fails, fix your implementation, not the test.
+
+## Verification Before Done (MANDATORY)
+
+Before reporting this story complete, you MUST do ALL of the following:
+
+1. Run the quality gate and show the FULL terminal output:
+   cd $work_dir && $QUALITY_GATE
+2. Count tests that passed — the number must be > 0.
+3. Verify each acceptance criterion explicitly with evidence from the output.
+4. If the quality gate exits non-zero: fix the errors and re-run until it passes.
+
+Claiming "quality gate passed" without pasting the actual output is NOT sufficient.
+The orchestrator will re-run the gate itself — discrepancies trigger a retry.
+
+When done, report:
+- Files created/modified
+- All acceptance criteria: PASS/FAIL
+- Quality gate result
+- Learnings or gotchas for next agent
+PROMPT
+}
+
+# ---------------------------------------------------------------------------
+# Run quality gate
+# ---------------------------------------------------------------------------
+run_quality_gate() {
+    info "Running quality gate: ${BOLD}$QUALITY_GATE${NC}"
+    if (cd "$PROJECT_ROOT" && eval "$QUALITY_GATE") >/dev/null 2>&1; then
+        success "Quality gate PASSED"
+        return 0
+    else
+        error "Quality gate FAILED"
+        return 1
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Verify story files exist
+# ---------------------------------------------------------------------------
+verify_files() {
+    local story_id="$1"
+    local all_exist=true
+    while IFS= read -r file; do
+        local full_path="$PROJECT_ROOT/$file"
+        if [[ ! -f "$full_path" ]]; then
+            warn "Expected file missing: $file"
+            all_exist=false
+        fi
+    done < <(get_story "$story_id" | jq -r '.filesAffected[]')
+    $all_exist
+}
+
+# ---------------------------------------------------------------------------
+# Update prd.json - mark story as passed
+# ---------------------------------------------------------------------------
+mark_story_passed() {
+    local story_id="$1"
+    local notes="$2"
+    local tmp
+    tmp=$(mktemp)
+    jq "(.stories[] | select(.id == $story_id)) |= (.passes = true | .notes = \"$notes\")" \
+        "$PRD_FILE" > "$tmp" && mv "$tmp" "$PRD_FILE"
+}
+
+# ---------------------------------------------------------------------------
+# Append to progress.txt
+# ---------------------------------------------------------------------------
+append_progress() {
+    local story_id="$1"
+    local title="$2"
+    local files="$3"
+    local learnings="$4"
+    local timestamp
+    timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+    cat >> "$PROGRESS_FILE" <<EOF
+
+## Story $story_id: $title - COMPLETE
+Timestamp: $timestamp
+Files: $files
+Learnings: $learnings
+---
+EOF
+}
+
+# ---------------------------------------------------------------------------
+# Git commit for story
+# ---------------------------------------------------------------------------
+commit_story() {
+    local story_id="$1"
+    local title="$2"
+    local description="$3"
+
+    # Stage only the story's files
+    while IFS= read -r file; do
+        (cd "$PROJECT_ROOT" && git add "$file" 2>/dev/null) || true
+    done < <(get_story "$story_id" | jq -r '.filesAffected[]')
+
+    # Only commit if there are staged changes
+    if (cd "$PROJECT_ROOT" && git diff --cached --quiet 2>/dev/null); then
+        dim "  No changes to commit for Story $story_id (files unchanged)"
+        return 0
+    fi
+
+    # Commit
+    local short_desc
+    short_desc=$(echo "$description" | head -c 72)
+    (cd "$PROJECT_ROOT" && git commit -m "feat: $(echo "$title" | tr '[:upper:]' '[:lower:]')
+
+Story $story_id/$TOTAL_STORIES: $short_desc
+
+Co-Authored-By: Ralph++ <noreply@ralph.ai>" 2>/dev/null)
+}
+
+# ---------------------------------------------------------------------------
+# Compute hash of spec-driven test files (tests/speckit/)
+# ---------------------------------------------------------------------------
+compute_speckit_tests_hash() {
+    if [ -d "$PROJECT_ROOT/tests/speckit" ]; then
+        find "$PROJECT_ROOT/tests/speckit" -name '*.test.ts' -type f | sort | xargs sha256sum 2>/dev/null | sha256sum | awk '{print $1}'
+    else
+        echo "no-speckit-tests"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Verify spec-driven tests were not modified by agent
+# ---------------------------------------------------------------------------
+verify_speckit_tests_hash() {
+    local before_hash="$1"
+    local after_hash
+    after_hash=$(compute_speckit_tests_hash)
+
+    if [[ "$before_hash" != "$after_hash" ]]; then
+        error "SPEC-DRIVEN TEST TAMPERING DETECTED!"
+        error "Agent modified files in tests/speckit/ — this is forbidden."
+        error "Hash before: $before_hash"
+        error "Hash after:  $after_hash"
+        # Restore the test files from git
+        if (cd "$PROJECT_ROOT" && git checkout -- tests/speckit/ 2>/dev/null); then
+            warn "Restored tests/speckit/ from git."
+        fi
+        return 1
+    fi
+    return 0
+}
+
+# ---------------------------------------------------------------------------
+# Worktree management for parallel isolation
+# ---------------------------------------------------------------------------
+create_story_worktree() {
+    local story_id="$1"
+    local worktree_branch="ralph-story-${story_id}"
+    local worktree_dir="${PROJECT_ROOT}/.worktrees/story-${story_id}"
+
+    # Create branch from current HEAD
+    (cd "$PROJECT_ROOT" && git branch "$worktree_branch" HEAD 2>/dev/null || true)
+    (cd "$PROJECT_ROOT" && git worktree add "$worktree_dir" "$worktree_branch" 2>/dev/null)
+
+    echo "$worktree_dir"
+}
+
+merge_story_worktree() {
+    local story_id="$1"
+    local worktree_branch="ralph-story-${story_id}"
+
+    if ! (cd "$PROJECT_ROOT" && git merge --no-edit "$worktree_branch" 2>/dev/null); then
+        warn "Merge conflict for story $story_id worktree — manual resolution needed"
+        return 1
+    fi
+    return 0
+}
+
+cleanup_story_worktree() {
+    local story_id="$1"
+    local worktree_dir="${PROJECT_ROOT}/.worktrees/story-${story_id}"
+    local worktree_branch="ralph-story-${story_id}"
+
+    git -C "$PROJECT_ROOT" worktree remove "$worktree_dir" --force 2>/dev/null || true
+    git -C "$PROJECT_ROOT" branch -D "$worktree_branch" 2>/dev/null || true
+}
+
+cleanup_all_worktrees() {
+    if [ -d "$PROJECT_ROOT/.worktrees" ]; then
+        for dir in "$PROJECT_ROOT/.worktrees"/story-*; do
+            [ -d "$dir" ] || continue
+            local sid
+            sid=$(basename "$dir" | sed 's/story-//')
+            cleanup_story_worktree "$sid"
+        done
+        rmdir "$PROJECT_ROOT/.worktrees" 2>/dev/null || true
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Run a single agent (no verification - just execute and return)
+# ---------------------------------------------------------------------------
+run_agent() {
+    local story_id="$1"
+    local output_file="$2"
+    local work_dir="${3:-$PROJECT_ROOT}"
+
+    local prompt
+    prompt=$(build_prompt "$story_id" "$work_dir")
+
+    # Run claude -p with timeout wrapper (5 min default)
+    local timeout_secs=300
+    if ! (cd "$work_dir" && timeout "$timeout_secs" claude -p "$prompt" \
+        --output-format json \
+        --model "$MODEL" \
+        --max-budget-usd "$MAX_BUDGET" \
+        --allowedTools "Read Write Edit Glob Grep Bash" \
+        --dangerously-skip-permissions \
+        > "$output_file" 2>/dev/null); then
+        local exit_code=$?
+        if [[ $exit_code -eq 124 ]]; then
+            warn "Agent timed out after ${timeout_secs}s on story"
+        fi
+        return 1
+    fi
+    return 0
+}
+
+# ---------------------------------------------------------------------------
+# Implement a single story (sequential mode)
+# ---------------------------------------------------------------------------
+implement_story() {
+    local story_id="$1"
+    local retry=${STORY_RETRIES[$story_id]:-0}
+    local story_json title description files_list
+
+    story_json=$(get_story "$story_id")
+    title=$(echo "$story_json" | jq -r '.title')
+    description=$(echo "$story_json" | jq -r '.description')
+    files_list=$(echo "$story_json" | jq -r '.filesAffected | join(", ")')
+
+    if [[ $retry -gt 0 ]]; then
+        warn "Retry $retry/$MAX_RETRIES for Story $story_id"
+    fi
+
+    echo ""
+    info "${BOLD}Story $story_id: $title${NC}"
+    dim "  Files: $files_list"
+    dim "  Model: $MODEL | Budget: \$$MAX_BUDGET"
+    echo ""
+
+    info "Spawning fresh agent..."
+    local start_time output_file
+    start_time=$(date +%s)
+    output_file=$(mktemp)
+
+    # Compute hash of spec-driven tests before agent runs
+    local speckit_hash_before
+    speckit_hash_before=$(compute_speckit_tests_hash)
+
+    if ! run_agent "$story_id" "$output_file"; then
+        warn "claude -p exited with non-zero status"
+    fi
+
+    local end_time elapsed cost
+    end_time=$(date +%s)
+    elapsed=$((end_time - start_time))
+    cost=$(jq -r '.total_cost_usd // 0' "$output_file" 2>/dev/null || echo "0")
+
+    dim "  Completed in ${elapsed}s | Cost: \$${cost}"
+
+    # Check for errors in output
+    local is_error
+    is_error=$(jq -r '.is_error // false' "$output_file" 2>/dev/null || echo "true")
+    rm -f "$output_file"
+
+    if [[ "$is_error" == "true" ]]; then
+        error "Agent reported error for Story $story_id"
+        STORY_RETRIES[$story_id]=$((retry + 1))
+        if [[ ${STORY_RETRIES[$story_id]} -ge $MAX_RETRIES ]]; then
+            error "Story $story_id BLOCKED after $MAX_RETRIES retries"
+            return 1
+        fi
+        return 2  # retriable failure
+    fi
+
+    # Verify spec-driven tests were not tampered with
+    if ! verify_speckit_tests_hash "$speckit_hash_before"; then
+        STORY_RETRIES[$story_id]=$((retry + 1))
+        if [[ ${STORY_RETRIES[$story_id]} -ge $MAX_RETRIES ]]; then
+            error "Story $story_id BLOCKED: agent keeps modifying spec-driven tests"
+            return 1
+        fi
+        warn "Retrying Story $story_id with reinforced test protection..."
+        return 2  # retriable failure
+    fi
+
+    # Verify quality gate
+    if ! run_quality_gate; then
+        STORY_RETRIES[$story_id]=$((retry + 1))
+        if [[ ${STORY_RETRIES[$story_id]} -ge $MAX_RETRIES ]]; then
+            error "Story $story_id BLOCKED after $MAX_RETRIES retries (quality gate)"
+            return 1
+        fi
+        return 2  # retriable failure
+    fi
+
+    # Verify files exist
+    if ! verify_files "$story_id"; then
+        warn "Some expected files are missing for Story $story_id"
+        STORY_RETRIES[$story_id]=$((retry + 1))
+        if [[ ${STORY_RETRIES[$story_id]} -ge $MAX_RETRIES ]]; then
+            error "Story $story_id BLOCKED after $MAX_RETRIES retries (missing files)"
+            return 1
+        fi
+        return 2  # retriable failure
+    fi
+
+    # Success! Update state
+    mark_story_passed "$story_id" "Completed in ${elapsed}s, \$${cost}"
+    append_progress "$story_id" "$title" "$files_list" "Completed in ${elapsed}s"
+    commit_story "$story_id" "$title" "$description"
+
+    local completed
+    completed=$(count_completed)
+    success "Story $story_id COMPLETE ($completed/$TOTAL_STORIES)"
+    return 0
+}
+
+# ---------------------------------------------------------------------------
+# Implement a batch of stories in parallel
+# ---------------------------------------------------------------------------
+implement_batch() {
+    local story_ids=("$@")
+    local count=${#story_ids[@]}
+
+    if [[ $count -eq 1 ]]; then
+        implement_story "${story_ids[0]}"
+        return $?
+    fi
+
+    # --- Parallel execution with worktrees ---
+    echo ""
+    parallel_info "${BOLD}Parallel batch: ${count} stories (isolated worktrees)${NC}"
+
+    local pids=()
+    local output_files=()
+    local worktree_dirs=()
+    local start_times=()
+    local batch_start
+    batch_start=$(date +%s)
+
+    # Compute hash of spec-driven tests before batch
+    local speckit_hash_before
+    speckit_hash_before=$(compute_speckit_tests_hash)
+
+    for story_id in "${story_ids[@]}"; do
+        local story_json title files_list
+        story_json=$(get_story "$story_id")
+        title=$(echo "$story_json" | jq -r '.title')
+        files_list=$(echo "$story_json" | jq -r '.filesAffected | join(", ")')
+
+        # Create isolated worktree
+        local worktree_dir
+        worktree_dir=$(create_story_worktree "$story_id")
+        worktree_dirs+=("$worktree_dir")
+
+        parallel_info "  Story $story_id: $title"
+        dim "    Files: $files_list"
+        dim "    Worktree: $worktree_dir"
+
+        local output_file
+        output_file=$(mktemp)
+        output_files+=("$output_file")
+        start_times+=("$(date +%s)")
+
+        # Launch agent in worktree (background)
+        run_agent "$story_id" "$output_file" "$worktree_dir" &
+        pids+=($!)
+    done
+
+    echo ""
+    parallel_info "Waiting for ${count} agents to complete..."
+
+    # Wait for all agents
+    local agent_statuses=()
+    for pid in "${pids[@]}"; do
+        if wait "$pid" 2>/dev/null; then
+            agent_statuses+=(0)
+        else
+            agent_statuses+=(1)
+        fi
+    done
+
+    local batch_end batch_elapsed
+    batch_end=$(date +%s)
+    batch_elapsed=$((batch_end - batch_start))
+    parallel_info "All agents finished in ${batch_elapsed}s"
+    echo ""
+
+    # Verify and merge each story individually (per-worktree quality gate)
+    local any_failed=false
+    local any_blocked=false
+    for i in "${!story_ids[@]}"; do
+        local story_id="${story_ids[$i]}"
+        local output_file="${output_files[$i]}"
+        local worktree_dir="${worktree_dirs[$i]}"
+        local status="${agent_statuses[$i]}"
+        local elapsed=$((batch_end - ${start_times[$i]}))
+        local cost
+        cost=$(jq -r '.total_cost_usd // 0' "$output_file" 2>/dev/null || echo "0")
+
+        local story_json title description files_list
+        story_json=$(get_story "$story_id")
+        title=$(echo "$story_json" | jq -r '.title')
+        description=$(echo "$story_json" | jq -r '.description')
+        files_list=$(echo "$story_json" | jq -r '.filesAffected | join(", ")')
+
+        dim "  Story $story_id ($title): agent done (${elapsed}s, \$${cost})"
+        rm -f "$output_file"
+
+        # Check agent status
+        if [[ "$status" -ne 0 ]]; then
+            warn "  Story $story_id: agent failed"
+            local retry=${STORY_RETRIES[$story_id]:-0}
+            STORY_RETRIES[$story_id]=$((retry + 1))
+            if [[ ${STORY_RETRIES[$story_id]} -ge $MAX_RETRIES ]]; then
+                error "Story $story_id BLOCKED after $MAX_RETRIES retries"
+                any_blocked=true
+            fi
+            any_failed=true
+            continue
+        fi
+
+        # Quality gate per worktree
+        info "  Quality gate for Story $story_id..."
+        if ! (cd "$worktree_dir" && eval "$QUALITY_GATE") >/dev/null 2>&1; then
+            warn "  Story $story_id: quality gate failed"
+            local retry=${STORY_RETRIES[$story_id]:-0}
+            STORY_RETRIES[$story_id]=$((retry + 1))
+            if [[ ${STORY_RETRIES[$story_id]} -ge $MAX_RETRIES ]]; then
+                error "Story $story_id BLOCKED after $MAX_RETRIES retries (quality gate)"
+                any_blocked=true
+            fi
+            any_failed=true
+            continue
+        fi
+        success "  Story $story_id: quality gate passed"
+
+        # Verify files in worktree
+        local all_files_exist=true
+        while IFS= read -r file; do
+            if [[ ! -f "$worktree_dir/$file" ]]; then
+                warn "  Story $story_id: missing file $file"
+                all_files_exist=false
+            fi
+        done < <(echo "$story_json" | jq -r '.filesAffected[]')
+
+        if ! $all_files_exist; then
+            local retry=${STORY_RETRIES[$story_id]:-0}
+            STORY_RETRIES[$story_id]=$((retry + 1))
+            any_failed=true
+            continue
+        fi
+
+        # Merge worktree branch back to feature branch
+        if ! merge_story_worktree "$story_id"; then
+            warn "  Story $story_id: merge conflict — needs manual resolution"
+            local retry=${STORY_RETRIES[$story_id]:-0}
+            STORY_RETRIES[$story_id]=$((retry + 1))
+            any_failed=true
+            continue
+        fi
+
+        # Success! Update state
+        mark_story_passed "$story_id" "Completed in ${elapsed}s (parallel, worktree)"
+        append_progress "$story_id" "$title" "$files_list" "Completed in ${elapsed}s (parallel, worktree)"
+        commit_story "$story_id" "$title" "$description"
+
+        local completed
+        completed=$(count_completed)
+        success "Story $story_id COMPLETE ($completed/$TOTAL_STORIES)"
+    done
+
+    # Verify spec-driven tests integrity after all merges
+    if ! verify_speckit_tests_hash "$speckit_hash_before"; then
+        error "Spec-driven tests tampered during parallel batch"
+        # Restore
+        (cd "$PROJECT_ROOT" && git checkout -- tests/speckit/ 2>/dev/null) || true
+    fi
+
+    # Clean up all worktrees
+    parallel_info "Cleaning up worktrees..."
+    cleanup_all_worktrees
+
+    if $any_blocked; then
+        return 1
+    fi
+    if $any_failed; then
+        return 2  # retriable
+    fi
+    return 0
+}
+
+# ---------------------------------------------------------------------------
+# Print banner
+# ---------------------------------------------------------------------------
+print_banner() {
+    echo ""
+    echo -e "${BOLD}${CYAN}  ╔══════════════════════════════════════╗${NC}"
+    echo -e "${BOLD}${CYAN}  ║      Ralph++ Autonomous Loop         ║${NC}"
+    echo -e "${BOLD}${CYAN}  ║          with Parallel Batches        ║${NC}"
+    echo -e "${BOLD}${CYAN}  ╚══════════════════════════════════════╝${NC}"
+    echo ""
+}
+
+# ---------------------------------------------------------------------------
+# Dry-run: show execution plan with batches
+# ---------------------------------------------------------------------------
+show_execution_plan() {
+    info "${BOLD}Execution plan:${NC}"
+    echo ""
+
+    # Simulate the execution to show batches
+    local temp_prd
+    temp_prd=$(mktemp)
+    cp "$PRD_FILE" "$temp_prd"
+
+    local batch_num=0
+    local total_todo=0
+
+    while true; do
+        # Find ready stories from temp state
+        local ready
+        ready=$(jq -r '
+            .stories as $all |
+            [.stories[] | select(.passes == false)] |
+            map(select(
+                .dependencies as $deps |
+                ($deps | length == 0) or
+                ($deps | all(. as $dep | $all[] | select(.id == $dep) | .passes))
+            )) |
+            sort_by(.id) |
+            .[].id
+        ' "$temp_prd")
+
+        if [[ -z "$ready" ]]; then
+            break
+        fi
+
+        batch_num=$((batch_num + 1))
+        local count
+        count=$(echo "$ready" | wc -l)
+        total_todo=$((total_todo + count))
+
+        if [[ $count -gt 1 ]] && ! $NO_PARALLEL; then
+            parallel_info "  Batch $batch_num (${BOLD}parallel${NC}${MAGENTA}, $count stories):"
+        else
+            info "  Batch $batch_num ($count story):"
+        fi
+
+        for sid in $ready; do
+            local title complexity
+            title=$(jq -r ".stories[] | select(.id == $sid) | .title" "$temp_prd")
+            complexity=$(jq -r ".stories[] | select(.id == $sid) | .complexity" "$temp_prd")
+            echo "    Story $sid: $title [$complexity]"
+
+            # Mark as passed in temp
+            local tmp2
+            tmp2=$(mktemp)
+            jq "(.stories[] | select(.id == $sid)) |= (.passes = true)" "$temp_prd" > "$tmp2" && mv "$tmp2" "$temp_prd"
+        done
+        echo ""
+    done
+
+    rm -f "$temp_prd"
+
+    local deps
+    deps=$(jq -r '.stories[] | select(.dependencies | length > 0) | "  \(.id) depends on: \(.dependencies | join(", "))"' "$PRD_FILE")
+    if [[ -n "$deps" ]]; then
+        info "Dependencies:"
+        echo "$deps"
+        echo ""
+    fi
+
+    local mode="with parallel batches"
+    if $NO_PARALLEL; then
+        mode="sequentially"
+    fi
+    success "[dry-run] Would execute $total_todo stories in $batch_num batches ($mode)."
+}
+
+# ---------------------------------------------------------------------------
+# Main loop
+# ---------------------------------------------------------------------------
+main() {
+    parse_args "$@"
+    print_banner
+    find_session
+
+    # Clean up worktrees on exit (after PROJECT_ROOT is set)
+    trap 'cleanup_all_worktrees 2>/dev/null' EXIT
+
+    local completed
+    completed=$(count_completed)
+
+    detect_base_branch
+
+    info "Feature:  ${BOLD}$PROJECT_NAME${NC}"
+    info "Session:  $SESSION_ID"
+    info "Stories:  $completed/$TOTAL_STORIES complete"
+    info "Model:    $MODEL"
+    info "Quality:  $QUALITY_GATE"
+    if ! $NO_PARALLEL; then
+        info "Mode:     ${MAGENTA}parallel batches enabled${NC}"
+    fi
+    echo ""
+
+    if [[ "$completed" -eq "$TOTAL_STORIES" ]]; then
+        success "All stories already complete!"
+        return 0
+    fi
+
+    # Dry-run: show execution plan and exit
+    if $DRY_RUN; then
+        show_execution_plan
+        return 0
+    fi
+
+    # Create feature branch (before first story)
+    create_feature_branch
+
+    # Ensure .worktrees is gitignored
+    if ! grep -q '\.worktrees' "$PROJECT_ROOT/.gitignore" 2>/dev/null; then
+        echo '.worktrees/' >> "$PROJECT_ROOT/.gitignore"
+    fi
+
+    local iteration=0
+    local max_iterations=20
+    local total_start
+    total_start=$(date +%s)
+
+    while [[ $iteration -lt $max_iterations ]]; do
+        iteration=$((iteration + 1))
+
+        # Find ALL ready stories
+        local ready_ids
+        ready_ids=$(find_ready_stories)
+
+        if [[ -z "$ready_ids" ]]; then
+            break
+        fi
+
+        # Convert to array
+        local ready_array=()
+        while IFS= read -r id; do
+            ready_array+=("$id")
+        done <<< "$ready_ids"
+
+        local batch_size=${#ready_array[@]}
+        info "${DIM}─── Iteration $iteration ($batch_size ready) ───${NC}"
+
+        if $NO_PARALLEL || [[ $batch_size -eq 1 ]]; then
+            # Sequential: just do the first one
+            local result=0
+            implement_story "${ready_array[0]}" || result=$?
+            if [[ $result -eq 1 ]]; then
+                error "Stopping: Story ${ready_array[0]} blocked."
+                echo ""
+                error "Manual intervention required."
+                error "Fix the issue, then re-run: ./tools/ralph --session $SESSION_ID"
+                exit 1
+            fi
+            # result=2 means retriable, loop will pick it up again
+        else
+            # Parallel batch
+            local result=0
+            implement_batch "${ready_array[@]}" || result=$?
+            if [[ $result -eq 1 ]]; then
+                error "Stopping: batch blocked."
+                echo ""
+                error "Manual intervention required."
+                error "Fix the issue, then re-run: ./tools/ralph --session $SESSION_ID"
+                exit 1
+            fi
+        fi
+    done
+
+    # Final report
+    local total_end total_elapsed
+    total_end=$(date +%s)
+    total_elapsed=$((total_end - total_start))
+    completed=$(count_completed)
+
+    echo ""
+    echo -e "${BOLD}${GREEN}  ╔══════════════════════════════════════╗${NC}"
+    echo -e "${BOLD}${GREEN}  ║     RALPH++ IMPLEMENTATION COMPLETE  ║${NC}"
+    echo -e "${BOLD}${GREEN}  ╚══════════════════════════════════════╝${NC}"
+    echo ""
+    info "Feature:  $PROJECT_NAME"
+    info "Stories:  $completed/$TOTAL_STORIES complete"
+    info "Time:     ${total_elapsed}s"
+    echo ""
+    info "Git log:"
+    (cd "$PROJECT_ROOT" && git log --oneline -"$TOTAL_STORIES")
+    echo ""
+
+    # Push branch and create PR
+    push_and_create_pr
+}
+
+main "$@"

@@ -1,0 +1,89 @@
+name: Bug report
+description: Report a defect in Project-Forge framework, starters, or generated projects
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill in the sections below so we can reproduce and fix it.
+
+        For security issues, please use [GitHub Security Advisories](https://github.com/JimmyBlanquet/project-forge/security/advisories/new) instead of public issues.
+
+  - type: input
+    id: version
+    attributes:
+      label: Project-Forge version / commit
+      description: Output of `git rev-parse --short HEAD` from your Project-Forge clone
+      placeholder: "abc1234"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected component
+      options:
+        - tools/bootstrap
+        - tools/ralph
+        - tools/migrate-to-speckit
+        - starters/saas
+        - starters/saas-base
+        - starters/supabase-stripe
+        - skills/
+        - extensions/
+        - tests/forge-eval.sh
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Minimal steps to reproduce. Code blocks welcome.
+      placeholder: |
+        1. Run `./tools/bootstrap test --starter saas-base`
+        2. Observe...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include error messages, stack traces, screenshots if relevant
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, shell, Node version, Python version, Claude Code version
+      placeholder: |
+        - OS: Ubuntu 24.04
+        - Shell: bash 5.2
+        - Node: 20.10
+        - Claude Code: 2.1.112
+      render: markdown
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: confirmation
+    attributes:
+      label: Pre-flight checks
+      options:
+        - label: I ran `bash tests/forge-eval.sh` and it passed (or I'm reporting a failure of this harness)
+          required: true
+        - label: I searched existing issues and didn't find a duplicate
+          required: true

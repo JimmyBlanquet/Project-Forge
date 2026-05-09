@@ -1,0 +1,16 @@
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+# Run security checks (Phase 0)
+echo "🔒 Running security checks..."
+bash scripts/security-check.sh || exit 1
+
+# Validate test structure (Phase 1)
+echo "🧪 Validating test structure..."
+bash scripts/validate-test-structure.sh || exit 1
+
+# Run lint-staged (formatting + linting)
+echo "✨ Running lint-staged..."
+pnpm lint-staged || exit 1
+
+echo "✅ Pre-commit checks passed!"

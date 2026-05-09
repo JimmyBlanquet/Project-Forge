@@ -1,0 +1,34 @@
+{
+  "ralph++": {
+    "modes": {
+      "analyze": {
+        "enabled": true,
+        "autoStart": false,
+        "contextWindow": "4h",
+        "minCommits": 3
+      },
+      "improve": {
+        "maxIterations": 10,
+        "delayMs": 2000,
+        "autoValidate": true,
+        "autoCommit": false
+      },
+      "auto": {
+        "enabled": false,
+        "requireApproval": true,
+        "maxParallelSkills": 3
+      }
+    },
+    "skills": {
+      "categories": ["core", "integration", "cicd", "custom"],
+      "testCoverageMin": 70,
+      "docRequired": true,
+      "installScriptRequired": true
+    },
+    "validation": {
+      "external": true,
+      "maxQueries": 3,
+      "confidenceMin": 60
+    }
+  }
+}

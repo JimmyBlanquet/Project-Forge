@@ -1,0 +1,65 @@
+{
+  "projectName": "example-project",
+  "config": {
+    "projectRoot": "/absolute/path/to/project",
+    "constitutionPath": ".speckit/constitution.md",
+    "qualityGates": {
+      "typecheck": "npx tsc --noEmit",
+      "lint": "npx next lint",
+      "test": "npx vitest run",
+      "command": "npx tsc --noEmit && npx next lint && npx vitest run && npm run quality:jscpd && npm run quality:knip"
+    },
+    "tdd": {
+      "enabled": false,
+      "strict": false
+    }
+  },
+  "stories": [
+    {
+      "id": 1,
+      "title": "User Authentication",
+      "description": "Implement user authentication with email and password",
+      "acceptanceCriteria": [
+        "User can login with email and password",
+        "Invalid credentials show error message",
+        "Successful login redirects to dashboard",
+        "Session persists across page refresh"
+      ],
+      "filesAffected": [
+        "lib/auth.ts",
+        "components/LoginForm.tsx",
+        "pages/api/auth/login.ts"
+      ],
+      "priority": 1,
+      "complexity": "medium",
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": 2,
+      "title": "User Registration",
+      "description": "Allow new users to create accounts",
+      "acceptanceCriteria": [
+        "User can register with email and password",
+        "Email validation is performed",
+        "Password strength is validated",
+        "Successful registration logs user in automatically"
+      ],
+      "filesAffected": [
+        "components/RegisterForm.tsx",
+        "pages/api/auth/register.ts",
+        "lib/validation.ts"
+      ],
+      "priority": 2,
+      "complexity": "medium",
+      "passes": false,
+      "notes": ""
+    }
+  ],
+  "metadata": {
+    "source": "speckit",
+    "createdAt": "2026-01-23T00:00:00Z",
+    "updatedAt": "2026-01-23T00:00:00Z",
+    "version": "1.0.0"
+  }
+}

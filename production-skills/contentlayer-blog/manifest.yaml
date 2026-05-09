@@ -1,0 +1,56 @@
+name: contentlayer-blog
+version: 1.0.0
+description: MDX blog with Contentlayer for type-safe content management, syntax highlighting, and table of contents
+tier: 2
+tags:
+  - blog
+  - mdx
+  - content
+  - contentlayer
+  - markdown
+  - syntax-highlighting
+
+source_project: starters/saas-base
+validated: true
+production_ready: true
+
+tech_stack:
+  - contentlayer2@^0.5.0
+  - next-contentlayer2@^0.5.0
+  - rehype-autolink-headings@^7.1.0
+  - rehype-pretty-code@^0.13.2
+  - rehype-slug@^6.0.0
+  - remark-gfm@^4.0.0
+  - shiki@^1.11.0
+
+features:
+  - Type-safe MDX content management
+  - Automatic TypeScript types generation
+  - Syntax highlighting with Shiki
+  - Table of contents generation
+  - Auto-linking headings
+  - GitHub Flavored Markdown
+  - Computed fields (slug, images)
+  - Multiple content types (blog, docs, pages)
+
+dependencies:
+  required: []
+  optional: []
+
+prerequisites:
+  - Next.js 14+ with App Router
+  - TypeScript configured
+
+usage_example: |
+  import { allPosts } from "contentlayer/generated"
+
+  const posts = allPosts.sort((a, b) =>
+    new Date(b.date).getTime() - new Date(a.date).getTime()
+  )
+
+quality_gates:
+  - Contentlayer generates types successfully
+  - MDX content renders correctly
+  - Syntax highlighting works
+  - Table of contents generates
+  - Build succeeds without errors

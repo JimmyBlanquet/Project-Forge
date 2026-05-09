@@ -1,0 +1,566 @@
+{
+  "projectName": "auth-system",
+  "stories": [
+    {
+      "id": 1,
+      "title": "Initialize Project with Next.js and Supabase",
+      "description": "Set up the Next.js 14 project with TypeScript, Tailwind CSS, and Supabase integration. Configure all development tools including ESLint, Prettier, and Husky git hooks.",
+      "acceptanceCriteria": [
+        "Next.js 14+ project initialized with App Router",
+        "TypeScript 5+ configured in strict mode",
+        "Tailwind CSS 3.4+ installed and configured",
+        "ESLint and Prettier configured",
+        "Husky git hooks set up (pre-commit: lint + format)",
+        "Supabase project created",
+        "Supabase client libraries installed",
+        "Environment variables configured (.env.local.example created)",
+        "Development server starts without errors",
+        "Build succeeds"
+      ],
+      "priority": 1,
+      "complexity": "low",
+      "passes": false,
+      "filesAffected": [
+        "package.json",
+        "tsconfig.json",
+        "next.config.js",
+        "tailwind.config.ts",
+        ".eslintrc.json",
+        ".prettierrc",
+        ".env.local.example",
+        ".gitignore",
+        "app/layout.tsx",
+        "app/page.tsx",
+        "app/globals.css",
+        ".husky/pre-commit"
+      ],
+      "notes": ""
+    },
+    {
+      "id": 2,
+      "title": "Create Database Schema and RLS Policies",
+      "description": "Create PostgreSQL database schema for user profiles and audit logs. Set up Row Level Security policies to protect user data. Create database triggers for automatic profile creation.",
+      "acceptanceCriteria": [
+        "profiles table created with proper schema",
+        "audit_logs table created for security logging",
+        "RLS enabled on all public tables",
+        "RLS policies created (users can view/update own profile)",
+        "Trigger function create_profile_for_user() created",
+        "Trigger attached to auth.users table",
+        "Indexes created on foreign keys",
+        "Migration files created",
+        "Migrations applied to Supabase database",
+        "Database types generated for TypeScript"
+      ],
+      "priority": 1,
+      "complexity": "medium",
+      "passes": false,
+      "filesAffected": [
+        "supabase/migrations/20260118000001_initial_schema.sql",
+        "supabase/migrations/20260118000002_audit_logs.sql",
+        "supabase/migrations/20260118000003_rls_policies.sql",
+        "supabase/migrations/20260118000004_triggers.sql",
+        "supabase/migrations/20260118000005_indexes.sql",
+        "lib/supabase/types.ts"
+      ],
+      "notes": ""
+    },
+    {
+      "id": 3,
+      "title": "Set Up Authentication Infrastructure",
+      "description": "Create Supabase client instances for different environments (browser, server, middleware). Set up AuthProvider React Context, authentication hooks, and middleware for protecting routes.",
+      "acceptanceCriteria": [
+        "Supabase browser client created",
+        "Supabase server client created (for RSC)",
+        "Supabase middleware client created",
+        "AuthProvider context implemented",
+        "useAuth hook implemented (user, session, loading, signIn, signUp, signOut)",
+        "useUser hook implemented",
+        "useSession hook implemented",
+        "useSupabase hook implemented",
+        "Middleware created for auth guard",
+        "Protected route redirects to login",
+        "Types defined for auth context"
+      ],
+      "priority": 1,
+      "complexity": "medium",
+      "passes": false,
+      "filesAffected": [
+        "lib/supabase/client.ts",
+        "lib/supabase/server.ts",
+        "lib/supabase/middleware.ts",
+        "lib/supabase/types.ts",
+        "components/auth/AuthProvider.tsx",
+        "hooks/useAuth.ts",
+        "hooks/useUser.ts",
+        "hooks/useSession.ts",
+        "hooks/useSupabase.ts",
+        "middleware.ts",
+        "lib/constants/routes.ts",
+        "app/layout.tsx"
+      ],
+      "notes": ""
+    },
+    {
+      "id": 4,
+      "title": "Build Signup Form and API",
+      "description": "Create signup page with form validation using React Hook Form and Zod. Implement API route for user registration. Add real-time password strength indicator.",
+      "acceptanceCriteria": [
+        "Signup page UI created at /auth/signup",
+        "SignupForm component with email, password, full_name fields",
+        "Real-time validation with Zod schema",
+        "Password strength indicator (weak/medium/strong)",
+        "Continue with Google/GitHub buttons (non-functional placeholder)",
+        "POST /api/auth/signup endpoint implemented",
+        "Email uniqueness checked",
+        "Password hashed by Supabase Auth",
+        "User profile auto-created via trigger",
+        "Session created on successful signup",
+        "HTTP-only cookie set with tokens",
+        "Error handling (duplicate email, weak password, etc.)",
+        "Success redirects to dashboard",
+        "Link to login page"
+      ],
+      "priority": 1,
+      "complexity": "medium",
+      "passes": false,
+      "filesAffected": [
+        "app/auth/signup/page.tsx",
+        "components/auth/SignupForm.tsx",
+        "components/ui/Input.tsx",
+        "components/ui/Button.tsx",
+        "components/ui/Label.tsx",
+        "lib/validations/auth.ts",
+        "lib/utils/password.ts",
+        "lib/constants/messages.ts",
+        "app/api/auth/signup/route.ts",
+        "lib/utils/errors.ts"
+      ],
+      "notes": ""
+    },
+    {
+      "id": 5,
+      "title": "Build Login Form and API",
+      "description": "Create login page with email/password authentication. Implement rate limiting to prevent brute force attacks. Add remember me functionality.",
+      "acceptanceCriteria": [
+        "Login page UI created at /auth/login",
+        "LoginForm component with email and password fields",
+        "Real-time validation",
+        "Password visibility toggle",
+        "Remember me checkbox",
+        "Forgot password? link",
+        "POST /api/auth/login endpoint implemented",
+        "Credentials validated via Supabase Auth",
+        "Rate limiting (5 attempts per 15 min per IP) using Upstash Redis",
+        "Generic error message (don't reveal if email exists)",
+        "Session created on successful login",
+        "HTTP-only cookie set",
+        "Remember me extends session duration",
+        "Failed attempts logged to audit_logs",
+        "Success redirects to dashboard or original destination",
+        "Link to signup page"
+      ],
+      "priority": 1,
+      "complexity": "medium",
+      "passes": false,
+      "filesAffected": [
+        "app/auth/login/page.tsx",
+        "components/auth/LoginForm.tsx",
+        "lib/validations/auth.ts",
+        "app/api/auth/login/route.ts",
+        "lib/utils/rate-limit.ts",
+        "lib/utils/audit.ts"
+      ],
+      "notes": ""
+    },
+    {
+      "id": 6,
+      "title": "Implement Session Management and Logout",
+      "description": "Implement session validation, token refresh, and logout functionality. Ensure sessions persist across page reloads and refresh automatically before expiration.",
+      "acceptanceCriteria": [
+        "Session persists across page reloads",
+        "Session validates on app mount (useEffect in AuthProvider)",
+        "Expired sessions automatically refresh using refresh token",
+        "GET /api/auth/session endpoint returns current session",
+        "POST /api/auth/logout endpoint invalidates session",
+        "Logout clears HTTP-only cookies",
+        "Logout redirects to home or login page",
+        "Loading states shown during auth checks",
+        "useSession hook returns session status"
+      ],
+      "priority": 1,
+      "complexity": "low",
+      "passes": false,
+      "filesAffected": [
+        "app/api/auth/session/route.ts",
+        "app/api/auth/logout/route.ts",
+        "components/auth/AuthProvider.tsx",
+        "hooks/useSession.ts"
+      ],
+      "notes": ""
+    },
+    {
+      "id": 7,
+      "title": "Create Protected Routes and Dashboard",
+      "description": "Create dashboard page (protected) and implement route protection via middleware. Unauthenticated users should be redirected to login with return URL saved.",
+      "acceptanceCriteria": [
+        "Dashboard page created at /dashboard",
+        "Dashboard shows welcome message with user's name",
+        "Dashboard shows user avatar",
+        "Dashboard has navigation to settings",
+        "Middleware checks auth on /dashboard/* routes",
+        "Unauthenticated users redirected to /auth/login?redirect=/dashboard",
+        "After login, user redirected back to original destination",
+        "Authenticated users can access dashboard",
+        "Loading state shown during auth check"
+      ],
+      "priority": 1,
+      "complexity": "low",
+      "passes": false,
+      "filesAffected": [
+        "app/dashboard/page.tsx",
+        "app/dashboard/layout.tsx",
+        "components/layout/Header.tsx",
+        "components/ui/Avatar.tsx",
+        "middleware.ts",
+        "lib/constants/routes.ts"
+      ],
+      "notes": ""
+    },
+    {
+      "id": 8,
+      "title": "Implement Google OAuth Login",
+      "description": "Integrate Google OAuth 2.0 for social login. Handle OAuth callback, create or link user accounts, and extract user profile information from Google.",
+      "acceptanceCriteria": [
+        "Google OAuth app configured in Google Cloud Console",
+        "Google Client ID and Secret added to environment variables",
+        "Continue with Google button functional on login/signup pages",
+        "Clicking button redirects to Google OAuth consent screen",
+        "User authorizes, Google redirects to /api/auth/callback",
+        "GET /api/auth/callback handles OAuth callback",
+        "Exchange authorization code for access token",
+        "Fetch user profile from Google (email, name, avatar)",
+        "If email exists, link Google identity to existing user",
+        "If email new, create new user with Google identity",
+        "Session created, cookies set",
+        "User redirected to dashboard",
+        "OAuth errors handled gracefully (show user-friendly message)",
+        "OAuthButtons component created"
+      ],
+      "priority": 1,
+      "complexity": "high",
+      "passes": false,
+      "filesAffected": [
+        "components/auth/OAuthButtons.tsx",
+        "app/api/auth/callback/route.ts",
+        "lib/utils/oauth.ts",
+        ".env.local.example",
+        "components/auth/LoginForm.tsx",
+        "components/auth/SignupForm.tsx"
+      ],
+      "notes": ""
+    },
+    {
+      "id": 9,
+      "title": "Implement GitHub OAuth Login",
+      "description": "Integrate GitHub OAuth 2.0 for social login. Similar to Google OAuth but with GitHub-specific implementation.",
+      "acceptanceCriteria": [
+        "GitHub OAuth app configured in GitHub settings",
+        "GitHub Client ID and Secret added to environment variables",
+        "Continue with GitHub button functional",
+        "OAuth flow works (authorize, callback, profile fetch)",
+        "Account linking works",
+        "New account creation works",
+        "User redirected to dashboard",
+        "Errors handled"
+      ],
+      "priority": 2,
+      "complexity": "medium",
+      "passes": false,
+      "filesAffected": [
+        "components/auth/OAuthButtons.tsx",
+        "app/api/auth/callback/route.ts",
+        ".env.local.example"
+      ],
+      "notes": ""
+    },
+    {
+      "id": 10,
+      "title": "Build Password Reset Flow",
+      "description": "Implement password reset functionality via email. Users can request a reset link, receive email, and set a new password using a time-limited token.",
+      "acceptanceCriteria": [
+        "Password reset request page at /auth/reset-password",
+        "PasswordResetForm component (email input)",
+        "POST /api/auth/reset-password endpoint",
+        "Always return success (prevent email enumeration)",
+        "Email sent with reset link (if email exists)",
+        "Reset link contains time-limited token (1 hour expiry)",
+        "Update password page at /auth/update-password",
+        "UpdatePasswordForm component (new password input)",
+        "POST /api/auth/update-password validates token",
+        "Token must not be expired or already used",
+        "New password validated (strength check)",
+        "Password updated in database",
+        "All other sessions invalidated",
+        "Confirmation email sent",
+        "User can log in with new password",
+        "Error handling (expired token, invalid token)"
+      ],
+      "priority": 1,
+      "complexity": "medium",
+      "passes": false,
+      "filesAffected": [
+        "app/auth/reset-password/page.tsx",
+        "components/auth/PasswordResetForm.tsx",
+        "app/auth/update-password/page.tsx",
+        "components/auth/UpdatePasswordForm.tsx",
+        "app/api/auth/reset-password/route.ts",
+        "app/api/auth/update-password/route.ts",
+        "supabase/functions/send-reset-email/index.ts",
+        "components/auth/LoginForm.tsx"
+      ],
+      "notes": ""
+    },
+    {
+      "id": 11,
+      "title": "Build User Profile Page",
+      "description": "Create user profile page where users can view and edit their profile information (name, bio), upload avatar, and view connected social accounts.",
+      "acceptanceCriteria": [
+        "Profile page created at /settings/profile",
+        "Shows current profile (full_name, email, bio, avatar)",
+        "Form to edit full_name and bio",
+        "Avatar upload functionality",
+        "Shows connected accounts (Google, GitHub)",
+        "Option to disconnect social accounts",
+        "GET /api/user/profile endpoint returns profile + identities",
+        "PATCH /api/user/profile updates profile",
+        "POST /api/user/avatar uploads avatar to Supabase Storage",
+        "Avatar URL saved to profiles.avatar_url",
+        "Success message shown after update",
+        "Changes reflected immediately in UI",
+        "Validation (name length, bio length, image size/type)"
+      ],
+      "priority": 2,
+      "complexity": "medium",
+      "passes": false,
+      "filesAffected": [
+        "app/settings/profile/page.tsx",
+        "app/api/user/profile/route.ts",
+        "app/api/user/avatar/route.ts",
+        "lib/validations/profile.ts",
+        "components/ui/Avatar.tsx"
+      ],
+      "notes": ""
+    },
+    {
+      "id": 12,
+      "title": "Implement Password Change in Settings",
+      "description": "Add password change functionality in user settings. User must provide current password for verification before setting a new password.",
+      "acceptanceCriteria": [
+        "Security settings page at /settings/security",
+        "Form to change password (current, new, confirm)",
+        "Current password verified before allowing change",
+        "New password strength validated",
+        "Passwords must match (new === confirm)",
+        "POST /api/auth/update-password handles password change",
+        "Password updated in database",
+        "Optional: Logout all other sessions checkbox",
+        "Confirmation email sent",
+        "Success message shown"
+      ],
+      "priority": 2,
+      "complexity": "low",
+      "passes": false,
+      "filesAffected": [
+        "app/settings/security/page.tsx",
+        "app/api/auth/update-password/route.ts",
+        "lib/validations/auth.ts"
+      ],
+      "notes": ""
+    },
+    {
+      "id": 13,
+      "title": "Add Security Features (Rate Limiting, CSRF, Headers)",
+      "description": "Implement comprehensive security measures: rate limiting, CSRF protection, security headers, and audit logging for all authentication events.",
+      "acceptanceCriteria": [
+        "Rate limiting implemented with Upstash Redis (Login: 5/15min, Signup: 3/hour, Reset: 3/hour, API: 100/min, Avatar: 5/hour)",
+        "CSRF protection implemented (double submit cookie pattern)",
+        "Security headers set in middleware (HSTS, CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy)",
+        "Audit logging for auth events (login, logout, password change, etc.)",
+        "IP address and user agent captured in logs",
+        "All API routes protected by rate limiting",
+        "CSRF tokens validated on state-changing requests"
+      ],
+      "priority": 1,
+      "complexity": "medium",
+      "passes": false,
+      "filesAffected": [
+        "lib/utils/rate-limit.ts",
+        "lib/utils/csrf.ts",
+        "lib/utils/audit.ts",
+        "middleware.ts"
+      ],
+      "notes": ""
+    },
+    {
+      "id": 14,
+      "title": "Create Comprehensive Test Suite",
+      "description": "Write comprehensive test suite covering unit tests, integration tests, and E2E tests for all authentication flows and features.",
+      "acceptanceCriteria": [
+        "Unit test coverage > 80% (Utilities, Hooks, Validations)",
+        "Integration test coverage > 70% (All API routes, Database operations)",
+        "E2E tests for critical paths (Signup, Login, OAuth, Password reset, Protected routes, Session persistence, Profile update)",
+        "Test configuration files set up (vitest.config.ts, playwright.config.ts)",
+        "All tests passing",
+        "CI configured to run tests on PR"
+      ],
+      "priority": 1,
+      "complexity": "high",
+      "passes": false,
+      "filesAffected": [
+        "vitest.config.ts",
+        "playwright.config.ts",
+        "tests/unit/utils/password.test.ts",
+        "tests/unit/utils/email.test.ts",
+        "tests/unit/hooks/useAuth.test.tsx",
+        "tests/unit/validations/auth.test.ts",
+        "tests/integration/api/auth/signup.test.ts",
+        "tests/integration/api/auth/login.test.ts",
+        "tests/integration/api/auth/logout.test.ts",
+        "tests/integration/api/auth/reset-password.test.ts",
+        "tests/integration/api/user/profile.test.ts",
+        "tests/e2e/signup.spec.ts",
+        "tests/e2e/login.spec.ts",
+        "tests/e2e/oauth.spec.ts",
+        "tests/e2e/password-reset.spec.ts",
+        "tests/e2e/protected-routes.spec.ts",
+        ".github/workflows/ci.yml"
+      ],
+      "notes": ""
+    },
+    {
+      "id": 15,
+      "title": "Accessibility Audit and WCAG 2.1 AA Compliance",
+      "description": "Conduct accessibility audit and ensure WCAG 2.1 AA compliance. Fix any accessibility issues found.",
+      "acceptanceCriteria": [
+        "All forms have proper labels",
+        "All interactive elements keyboard accessible",
+        "Focus indicators visible on all interactive elements",
+        "Color contrast ratio >= 4.5:1 for text",
+        "Semantic HTML used throughout",
+        "ARIA labels added where needed",
+        "Images have alt text",
+        "Form errors announced to screen readers",
+        "Skip to content link added",
+        "Landmark regions defined (header, nav, main, footer)",
+        "Screen reader tested (NVDA or JAWS)",
+        "axe DevTools audit passed (0 violations)",
+        "WAVE tool audit passed",
+        "Lighthouse accessibility score > 95"
+      ],
+      "priority": 2,
+      "complexity": "medium",
+      "passes": false,
+      "filesAffected": [
+        "app/globals.css",
+        "components/layout/Header.tsx"
+      ],
+      "notes": ""
+    },
+    {
+      "id": 16,
+      "title": "Performance Optimization and Lighthouse Score",
+      "description": "Optimize application performance to meet constitution requirements: page load < 2s, API response < 300ms, Lighthouse score > 90, bundle size < 150kb.",
+      "acceptanceCriteria": [
+        "Lighthouse performance score > 90",
+        "Page load time < 2s (LCP < 2s)",
+        "Time to Interactive < 3s",
+        "First Input Delay < 100ms",
+        "Cumulative Layout Shift < 0.1",
+        "API response time < 300ms (p95)",
+        "Initial JS bundle < 150kb",
+        "Images optimized (next/image)",
+        "Fonts optimized (next/font)",
+        "Code splitting implemented",
+        "Bundle analysis shows no unnecessary large dependencies",
+        "Edge deployment configured",
+        "Vercel Analytics integrated"
+      ],
+      "priority": 2,
+      "complexity": "medium",
+      "passes": false,
+      "filesAffected": [
+        "next.config.js",
+        "app/layout.tsx",
+        ".env.local.example"
+      ],
+      "notes": ""
+    },
+    {
+      "id": 17,
+      "title": "Documentation (README, API Docs, User Guide)",
+      "description": "Create comprehensive documentation including README, API documentation, user guide, and developer guide.",
+      "acceptanceCriteria": [
+        "README.md updated with project description, features, tech stack, installation, deployment",
+        "API documentation created (OpenAPI/Swagger or similar)",
+        "User guide created (how to use the app)",
+        "Developer guide created (how to contribute, architecture overview)",
+        "Code comments added where necessary (complex logic)",
+        "TSDoc comments for public functions/hooks"
+      ],
+      "priority": 2,
+      "complexity": "low",
+      "passes": false,
+      "filesAffected": [
+        "README.md",
+        "docs/api.md",
+        "docs/user-guide.md",
+        "docs/developer-guide.md",
+        "docs/architecture.md"
+      ],
+      "notes": ""
+    },
+    {
+      "id": 18,
+      "title": "Production Deployment and Monitoring",
+      "description": "Deploy application to production on Vercel. Set up monitoring, error tracking, and alerting. Configure production environment variables.",
+      "acceptanceCriteria": [
+        "Vercel project created",
+        "Production environment variables configured in Vercel",
+        "Custom domain configured (if applicable)",
+        "SSL certificate active",
+        "Supabase production project created",
+        "Database migrated to production",
+        "Google OAuth production app configured",
+        "GitHub OAuth production app configured",
+        "Sentry project created for error tracking",
+        "Sentry integrated in app",
+        "Vercel Analytics enabled",
+        "Uptime monitoring configured (BetterUptime or similar)",
+        "Alerts configured (errors, downtime)",
+        "Production deployment successful",
+        "Smoke tests passed on production",
+        "Performance tested on production"
+      ],
+      "priority": 1,
+      "complexity": "medium",
+      "passes": false,
+      "filesAffected": [
+        "next.config.js",
+        ".env.production",
+        "app/layout.tsx"
+      ],
+      "notes": ""
+    }
+  ],
+  "metadata": {
+    "createdAt": "2026-01-18T12:38:46.000Z",
+    "source": "speckit",
+    "category": "core",
+    "estimatedTime": 280,
+    "constitutionPath": ".speckit/constitution.yml",
+    "specificationPath": ".speckit/specification.md",
+    "planPath": ".speckit/plan.md",
+    "tasksPath": ".speckit/tasks.md"
+  }
+}

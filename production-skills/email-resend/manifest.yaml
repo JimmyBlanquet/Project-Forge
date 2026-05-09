@@ -1,0 +1,51 @@
+name: email-resend
+version: 1.0.0
+description: Resend email service with React Email templates for transactional emails and magic links
+tier: 1
+tags:
+  - email
+  - resend
+  - react-email
+  - magic-link
+  - transactional
+
+source_project: starters/saas-base
+validated: true
+production_ready: true
+
+tech_stack:
+  - resend@^3.5.0
+  - react-email@2.1.5
+  - @react-email/components@0.0.21
+
+features:
+  - Resend email client configuration
+  - React Email templates (magic link, welcome, etc.)
+  - Integration with Auth.js for magic link authentication
+  - Development mode email testing
+  - Custom email headers to prevent threading
+
+dependencies:
+  optional:
+    - auth-nextauth # For magic link authentication
+
+prerequisites:
+  - Resend account with API key
+  - Verified sending domain
+  - Environment variables configured
+
+usage_example: |
+  import { resend } from "@/lib/email"
+  import { MagicLinkEmail } from "@/emails/magic-link-email"
+
+  await resend.emails.send({
+    from: "noreply@yourdomain.com",
+    to: "user@example.com",
+    subject: "Sign in link",
+    react: MagicLinkEmail({ actionUrl, firstName }),
+  })
+
+quality_gates:
+  - Email sends successfully in development
+  - React Email templates render correctly
+  - Magic link authentication works

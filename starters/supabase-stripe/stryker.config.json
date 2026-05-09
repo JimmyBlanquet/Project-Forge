@@ -1,0 +1,24 @@
+{
+  "$schema": "https://raw.githubusercontent.com/stryker-mutator/stryker/master/packages/core/schema/stryker-core.json",
+  "testRunner": "vitest",
+  "checkers": ["typescript"],
+  "reporters": ["clear-text", "html"],
+  "mutate": [
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    "lib/**/*.ts",
+    "utils/**/*.ts",
+    "!**/*.test.ts",
+    "!**/*.test.tsx",
+    "!**/*.d.ts",
+    "!**/generated/**"
+  ],
+  "thresholds": {
+    "high": 80,
+    "low": 60,
+    "break": 50
+  },
+  "incremental": true,
+  "timeoutMS": 30000,
+  "concurrency": 2
+}

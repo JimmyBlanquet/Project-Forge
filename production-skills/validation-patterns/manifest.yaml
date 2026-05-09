@@ -1,0 +1,52 @@
+name: validation-patterns
+version: 1.0.0
+description: Zod schema validation patterns for forms, API routes, and data validation with TypeScript type inference
+tier: 2
+tags:
+  - validation
+  - zod
+  - forms
+  - typescript
+  - type-safety
+
+source_project: starters/saas-base
+validated: true
+production_ready: true
+
+tech_stack:
+  - zod@^3.23.8
+  - react-hook-form@^7.52.1
+  - "@hookform/resolvers@^3.9.0"
+
+features:
+  - Type-safe schema validation
+  - Automatic TypeScript type inference
+  - Form validation with react-hook-form
+  - Server-side validation
+  - Custom error messages
+  - Schema composition and reusability
+
+dependencies:
+  required: []
+  optional:
+    - react-hook-form # For form validation
+
+prerequisites:
+  - TypeScript configured
+  - Next.js 14+ (for server actions examples)
+
+usage_example: |
+  import { z } from "zod"
+
+  const userSchema = z.object({
+    email: z.string().email(),
+    name: z.string().min(3).max(32),
+  })
+
+  type User = z.infer<typeof userSchema>
+
+quality_gates:
+  - Schema validates correctly
+  - TypeScript types inferred correctly
+  - Form validation works
+  - Server-side validation works

@@ -1,0 +1,23 @@
+name: speckit-constitution
+version: 1.0.0
+description: Generate project constitution (principles, standards, constraints)
+category: speckit
+author: Project-Forge Team
+
+command:
+  name: speckit-constitution
+  description: Generate project constitution with principles and standards
+  arguments:
+    - name: project-description
+      description: High-level description of the project
+      required: true
+
+capabilities:
+  - filesystem_access
+  - file_creation
+
+tags:
+  - speckit
+  - specification
+  - planning
+  - constitution

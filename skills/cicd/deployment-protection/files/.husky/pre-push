@@ -1,0 +1,82 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# Pre-push hook to enforce development workflow
+# Prevents pushing to staging/main without running validation tests
+
+# Get the current branch being pushed
+current_branch=$(git branch --show-current)
+
+# Get the remote branch being pushed to
+while read local_ref local_sha remote_ref remote_sha
+do
+  remote_branch=$(echo $remote_ref | sed 's|refs/heads/||')
+
+  # Check if pushing to staging or main
+  if [ "$remote_branch" = "staging" ] || [ "$remote_branch" = "main" ]; then
+    echo "🚨 PUSH TO $remote_branch DETECTED"
+    echo ""
+
+    # Check if we're on staging/main branch
+    if [ "$current_branch" = "staging" ] || [ "$current_branch" = "main" ]; then
+      # Check if the last commit is a merge commit (allowed workflow)
+      is_merge_commit=$(git log -1 --merges --format=%H 2>/dev/null)
+      last_commit=$(git log -1 --format=%H 2>/dev/null)
+
+      if [ "$is_merge_commit" != "$last_commit" ]; then
+        echo "❌ ERROR: You are pushing direct commits from $current_branch branch"
+        echo ""
+        echo "MANDATORY WORKFLOW:"
+        echo "1. Create feature branch: git checkout -b feat/my-feature"
+        echo "2. Make changes and commit"
+        echo "3. Run validation: bash scripts/pre-staging-merge.sh"
+        echo "4. Merge to staging: git checkout staging && git merge feat/my-feature --no-ff"
+        echo "5. Then push: git push origin staging"
+        echo ""
+        echo "Direct commits on $current_branch are not allowed."
+        echo "The last commit must be a merge commit from a feature branch."
+        echo ""
+        echo "See: .claude/skills/development-workflow/SKILL.md"
+        echo ""
+        exit 1
+      fi
+
+      echo "✅ Detected merge commit from feature branch"
+    fi
+
+    # Check if validation marker file exists
+    validation_marker=".git/.validation-passed"
+
+    if [ ! -f "$validation_marker" ]; then
+      echo "❌ ERROR: Validation script has not been run"
+      echo ""
+      echo "MANDATORY: Run validation before pushing to $remote_branch"
+      echo ""
+      echo "Run this command:"
+      echo "  bash scripts/pre-staging-merge.sh"
+      echo ""
+      echo "This will:"
+      echo "  ✅ Run all unit tests (1,198+)"
+      echo "  ✅ Run TypeScript typecheck"
+      echo "  ✅ Run ESLint"
+      echo "  ✅ Run production build"
+      echo "  ✅ Run E2E tests (optional)"
+      echo "  ✅ Test against TEST cloud database"
+      echo ""
+      echo "Duration: 5-10 minutes"
+      echo ""
+      echo "See: .claude/skills/development-workflow/SKILL.md"
+      echo ""
+      exit 1
+    fi
+
+    # Validation passed, allow push
+    echo "✅ Validation passed - allowing push to $remote_branch"
+    echo ""
+
+    # Remove validation marker (one-time use)
+    rm -f "$validation_marker"
+  fi
+done
+
+exit 0

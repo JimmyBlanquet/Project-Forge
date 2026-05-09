@@ -1,0 +1,21 @@
+name: speckit-convert
+version: 1.0.0
+description: Convert SpecKit tasks to Ralph++ PRD (prd.json)
+category: speckit
+author: Project-Forge Team
+
+command:
+  name: speckit-convert
+  description: Convert tasks.md to prd.json for Ralph++ implementation
+  arguments: []
+
+capabilities:
+  - filesystem_access
+  - file_creation
+  - file_reading
+
+tags:
+  - speckit
+  - conversion
+  - ralph
+  - prd

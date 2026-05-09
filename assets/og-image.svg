@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="50%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#D97757"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#D97757" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#D97757" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <circle cx="900" cy="200" r="300" fill="url(#glow)"/>
+
+  <!-- Grid pattern -->
+  <g opacity="0.06" stroke="#94a3b8" stroke-width="1">
+    <path d="M 0 60 L 1200 60 M 0 120 L 1200 120 M 0 180 L 1200 180 M 0 240 L 1200 240 M 0 300 L 1200 300 M 0 360 L 1200 360 M 0 420 L 1200 420 M 0 480 L 1200 480 M 0 540 L 1200 540"/>
+    <path d="M 60 0 L 60 630 M 120 0 L 120 630 M 180 0 L 180 630 M 240 0 L 240 630 M 300 0 L 300 630 M 360 0 L 360 630 M 420 0 L 420 630 M 480 0 L 480 630 M 540 0 L 540 630 M 600 0 L 600 630 M 660 0 L 660 630 M 720 0 L 720 630 M 780 0 L 780 630 M 840 0 L 840 630 M 900 0 L 900 630 M 960 0 L 960 630 M 1020 0 L 1020 630 M 1080 0 L 1080 630 M 1140 0 L 1140 630"/>
+  </g>
+
+  <!-- Header bar -->
+  <rect x="80" y="80" width="80" height="6" fill="url(#accent)" rx="3"/>
+
+  <!-- Title -->
+  <text x="80" y="180" font-family="-apple-system, system-ui, Segoe UI, sans-serif" font-size="84" font-weight="800" fill="#f8fafc">
+    Project-Forge
+  </text>
+
+  <!-- Tagline -->
+  <text x="80" y="240" font-family="-apple-system, system-ui, Segoe UI, sans-serif" font-size="32" font-weight="400" fill="#cbd5e1">
+    Production-ready SaaS factory
+  </text>
+
+  <!-- Big claim -->
+  <text x="80" y="335" font-family="-apple-system, system-ui, Segoe UI, sans-serif" font-size="56" font-weight="700" fill="url(#accent)">
+    From git init to prod
+  </text>
+  <text x="80" y="395" font-family="-apple-system, system-ui, Segoe UI, sans-serif" font-size="56" font-weight="700" fill="url(#accent)">
+    in under 48 hours
+  </text>
+
+  <!-- Feature pills -->
+  <g font-family="-apple-system, system-ui, Segoe UI, sans-serif" font-size="20" font-weight="500">
+    <rect x="80" y="450" width="220" height="44" rx="22" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+    <text x="190" y="479" fill="#e2e8f0" text-anchor="middle">Next.js 15 + Drizzle</text>
+
+    <rect x="320" y="450" width="180" height="44" rx="22" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+    <text x="410" y="479" fill="#e2e8f0" text-anchor="middle">spec-kit + Ralph++</text>
+
+    <rect x="520" y="450" width="170" height="44" rx="22" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+    <text x="605" y="479" fill="#e2e8f0" text-anchor="middle">Autonomous loops</text>
+
+    <rect x="710" y="450" width="160" height="44" rx="22" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+    <text x="790" y="479" fill="#e2e8f0" text-anchor="middle">CI/CD baked in</text>
+  </g>
+
+  <!-- Footer -->
+  <text x="80" y="580" font-family="-apple-system, system-ui, Segoe UI, sans-serif" font-size="20" fill="#64748b">
+    Built with Claude Code · MIT License · github.com/JimmyBlanquet/project-forge
+  </text>
+</svg>

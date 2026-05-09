@@ -1,0 +1,25 @@
+schema_version: "1.0"
+
+extension:
+  id: "pf-audit"
+  name: "Project-Forge SDLC Audit"
+  version: "1.0.0"
+  description: "Audit SDLC maturity of a project: CI/CD, testing, security, documentation, and operational readiness."
+  author: "Project-Forge"
+  repository: "https://github.com/JimmyBlanquet/project-forge"
+  license: "MIT"
+
+requires:
+  speckit_version: ">=0.3.2"
+
+provides:
+  commands:
+    - name: "speckit.pf-audit.audit-sdlc"
+      file: "commands/audit-sdlc.md"
+      description: "Audit project SDLC maturity and generate scored report"
+
+tags:
+  - "audit"
+  - "sdlc"
+  - "maturity"
+  - "project-forge"

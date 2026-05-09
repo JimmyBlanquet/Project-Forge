@@ -1,0 +1,104 @@
+name: Staging Gatekeeper
+
+# Ce workflow bloque les push directs vers staging
+# Force l'utilisation de Pull Requests avec tests validés
+
+on:
+  push:
+    branches: [staging]
+
+env:
+  NODE_VERSION: '18'
+
+jobs:
+  # Job qui échoue si push direct (pas via PR merge)
+  block-direct-push:
+    name: Block Direct Push to Staging
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Check if this is a PR merge
+        id: check_pr
+        run: |
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          COMMIT_SHA=$(git log -1 --pretty=%H)
+
+          # Pattern 1: merge commit classique
+          if [[ "$COMMIT_MSG" == *"Merge pull request"* ]] || \
+             [[ "$COMMIT_MSG" == *"Merge branch"* ]]; then
+            echo "PR merge detected (merge commit)"
+            echo "is_pr_merge=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Pattern 2: squash merge — check GitHub API for associated PR
+          # Retry once after 5s to handle race condition where PR association
+          # is not yet indexed by GitHub
+          for attempt in 1 2; do
+            PR_DATA=$(gh api "repos/${REPO}/commits/${COMMIT_SHA}/pulls" --jq '.[0].number' 2>/dev/null || echo "")
+            if [ -n "$PR_DATA" ]; then
+              echo "Squash merge detected (PR #$PR_DATA, attempt $attempt)"
+              echo "is_pr_merge=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            if [ "$attempt" -eq 1 ]; then
+              echo "PR association not found, retrying in 5s..."
+              sleep 5
+            fi
+          done
+
+          echo "Direct push detected — blocked"
+          echo "is_pr_merge=false" >> "$GITHUB_OUTPUT"
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+
+      - name: Fail if direct push
+        if: steps.check_pr.outputs.is_pr_merge != 'true'
+        run: |
+          echo "🚫 PUSH DIRECT VERS STAGING INTERDIT 🚫"
+          echo ""
+          echo "Pour pusher vers staging, tu dois:"
+          echo "1. Créer une feature branch: git checkout -b feat/ma-feature"
+          echo "2. Pusher la feature: git push origin feat/ma-feature"
+          echo "3. Créer une PR: gh pr create --base staging"
+          echo "4. Attendre que les tests passent"
+          echo "5. Merger la PR (les tests doivent être verts)"
+          echo ""
+          echo "Workflow recommandé:"
+          echo "  git checkout -b feat/nouvelle-feature"
+          echo "  git commit -m 'feat: ...'"
+          echo "  git push origin feat/nouvelle-feature"
+          echo "  gh pr create --base staging --fill"
+          echo ""
+          exit 1
+
+  # Si c'est un merge de PR, on vérifie que les tests ont bien passé
+  verify-tests-passed:
+    name: Verify Tests Passed on PR
+    runs-on: ubuntu-latest
+    needs: [block-direct-push]
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check PR tests status
+        run: |
+          # Récupérer le dernier run de CI
+          LATEST_RUN=$(gh run list --workflow=ci.yml --limit 1 --json conclusion,status -q '.[0]')
+          echo "Latest CI run: $LATEST_RUN"
+
+          # Si le dernier run a échoué, on bloque
+          CONCLUSION=$(echo "$LATEST_RUN" | jq -r '.conclusion')
+          if [[ "$CONCLUSION" == "failure" ]]; then
+            echo "❌ Les tests CI ont échoué - deploy bloqué"
+            exit 1
+          fi
+
+          echo "✅ Les tests CI sont passés - deploy autorisé"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

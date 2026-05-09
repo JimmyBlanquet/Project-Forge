@@ -1,0 +1,21 @@
+name: speckit-tasks
+version: 1.0.0
+description: Generate implementation tasks (user stories ready for Ralph++)
+category: speckit
+author: Project-Forge Team
+
+command:
+  name: speckit-tasks
+  description: Generate detailed implementation tasks based on specification and plan
+  arguments: []
+
+capabilities:
+  - filesystem_access
+  - file_creation
+  - file_reading
+
+tags:
+  - speckit
+  - tasks
+  - user-stories
+  - implementation

@@ -1,0 +1,21 @@
+name: speckit-specify
+version: 1.0.0
+description: Generate functional specification (requirements, user stories, success criteria)
+category: speckit
+author: Project-Forge Team
+
+command:
+  name: speckit-specify
+  description: Generate functional specification based on constitution
+  arguments: []
+
+capabilities:
+  - filesystem_access
+  - file_creation
+  - file_reading
+
+tags:
+  - speckit
+  - specification
+  - requirements
+  - user-stories

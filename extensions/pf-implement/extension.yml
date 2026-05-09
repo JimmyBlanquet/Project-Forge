@@ -1,0 +1,36 @@
+schema_version: "1.0"
+
+extension:
+  id: "pf-implement"
+  name: "Project-Forge Implementation (Ralph++)"
+  version: "1.0.0"
+  description: "Launch Ralph++ autonomous implementation from prd.json. Parallel agent execution, quality gates, and feature branch workflow."
+  author: "Project-Forge"
+  repository: "https://github.com/JimmyBlanquet/project-forge"
+  license: "MIT"
+
+requires:
+  speckit_version: ">=0.3.2"
+  tools:
+    - name: "claude"
+      required: true
+
+provides:
+  commands:
+    - name: "speckit.pf-implement.implement"
+      file: "commands/implement.md"
+      description: "Launch Ralph++ autonomous implementation loop"
+  hooks:
+    - name: "pf-implement-suggest"
+      stage: "after_tasks"
+      inline: |
+        echo ""
+        echo "Tasks ready. Convert to PRD and start implementation?"
+        echo "  1. /speckit.pf.convert   (generate prd.json)"
+        echo "  2. /speckit.pf.implement (launch Ralph++)"
+
+tags:
+  - "ralph++"
+  - "implementation"
+  - "autonomous"
+  - "project-forge"

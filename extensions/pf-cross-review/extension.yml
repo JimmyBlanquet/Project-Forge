@@ -1,0 +1,19 @@
+schema_version: "1.0"
+
+extension:
+  id: "pf-cross-review"
+  name: "Project-Forge Cross-LLM Review (N0+N1+N2)"
+  version: "1.1.0"
+  description: "Run a contradictory code review on a git range using 3 LLM schools: N0 Anthropic via sub-agent, N1 OpenAI via codex CLI, N2 local LLM endpoint (e.g. qwen + devstral via llama-swap, vLLM, or Ollama). Configurable via LLM_ENDPOINT and LLM_API_KEY env vars. Graceful degradation if any school unavailable."
+  author: "Project-Forge"
+  repository: "https://github.com/JimmyBlanquet/project-forge"
+  license: "MIT"
+
+requires:
+  speckit_version: ">=0.3.2"
+
+provides:
+  commands:
+    - name: "speckit.pf-cross-review.cross-review"
+      file: "commands/cross-review.md"
+      description: "Run N0 (Anthropic) + N1 (Codex/OpenAI) + N2 (local LLM: e.g. qwen + devstral via your llama-swap/vLLM/Ollama) reviews on a git range, consolidate findings"

@@ -1,0 +1,28 @@
+{
+  "name": "@project-forge/ralph-plus-plus",
+  "version": "1.0.0-alpha.1",
+  "description": "Autonomous skill generation system for Project-Forge",
+  "main": "core/index.ts",
+  "bin": {
+    "ralph++": "./cli.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "cli": "tsx cli.ts"
+  },
+  "keywords": [
+    "ralph",
+    "autonomous",
+    "skills",
+    "ai",
+    "project-forge"
+  ],
+  "author": "Project-Forge",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^25.0.9",
+    "tsx": "^4.21.0",
+    "vitest": "^4.0.17"
+  }
+}

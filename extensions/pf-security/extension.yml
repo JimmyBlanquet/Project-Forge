@@ -1,0 +1,29 @@
+schema_version: "1.0"
+
+extension:
+  id: "pf-security"
+  name: "Project-Forge Security Analysis"
+  version: "1.0.0"
+  description: "STRIDE threat modeling and architecture review for spec-kit projects."
+  author: "Project-Forge"
+  repository: "https://github.com/JimmyBlanquet/project-forge"
+  license: "MIT"
+
+requires:
+  speckit_version: ">=0.3.2"
+
+provides:
+  commands:
+    - name: "speckit.pf-security.threat-model"
+      file: "commands/threat-model.md"
+      description: "Generate STRIDE threat model from spec.md"
+    - name: "speckit.pf-security.archi-review"
+      file: "commands/archi-review.md"
+      description: "Run architecture audit (ATAM/DCAR/ISO 25010)"
+
+tags:
+  - "security"
+  - "stride"
+  - "architecture"
+  - "audit"
+  - "project-forge"

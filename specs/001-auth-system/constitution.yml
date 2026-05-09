@@ -1,0 +1,158 @@
+name: Auth System
+version: 1.0.0
+description: User authentication system with email/password and social login (Google, GitHub)
+
+principles:
+  architecture:
+    - Separation of concerns (auth logic, UI, API separate)
+    - Security-first design (defense in depth)
+    - Stateless authentication (JWT tokens)
+    - API-first design (frontend-agnostic auth API)
+    - Fail-fast validation (validate early, reject bad input immediately)
+
+  quality:
+    - Type-safe by default (TypeScript strict mode)
+    - Test coverage > 80% (especially auth flows)
+    - Zero secrets in code (environment variables only)
+    - Code review required (security-critical code)
+    - Automated testing (CI/CD pipeline)
+
+  ux:
+    - Instant feedback (real-time validation)
+    - Clear error messages (user-friendly, actionable)
+    - Accessible (WCAG 2.1 AA compliance)
+    - Mobile-responsive (works on all devices)
+    - Progressive enhancement (works without JavaScript for core flows)
+
+  security:
+    - Secure by default (https only, secure cookies)
+    - Zero trust architecture (verify every request)
+    - Principle of least privilege (minimal permissions)
+    - Defense in depth (multiple security layers)
+    - Security headers (CSP, HSTS, X-Frame-Options)
+    - Rate limiting (prevent brute force attacks)
+    - Input sanitization (prevent injection attacks)
+
+standards:
+  frontend:
+    - Next.js 14+ App Router
+    - TypeScript 5+ strict mode
+    - React 18+ with hooks
+    - Tailwind CSS for styling
+    - Zod for validation
+    - React Hook Form for forms
+    - SWR or React Query for data fetching
+
+  backend:
+    - Supabase for backend (Auth + Database)
+    - PostgreSQL database
+    - Row Level Security (RLS) enabled
+    - Edge Functions for custom logic
+    - Supabase Auth for authentication
+    - OAuth 2.0 for social login
+
+  tooling:
+    - ESLint + Prettier (code quality)
+    - Vitest for unit/integration tests
+    - Playwright for E2E tests
+    - GitHub Actions CI/CD
+    - Dependabot for dependency updates
+    - Husky for git hooks (pre-commit checks)
+
+  conventions:
+    - Feature-based folder structure
+    - Conventional commits (feat, fix, docs, etc.)
+    - Semantic versioning (SemVer)
+    - Component naming (PascalCase for components)
+    - File naming (kebab-case for files)
+    - API routes follow REST conventions
+
+constraints:
+  technical:
+    - Zero secrets in code (use .env files)
+    - Stateless architecture (no server-side sessions)
+    - Edge-compatible code (Vercel Edge Functions)
+    - Works without JavaScript (core auth flows)
+    - Database migrations versioned
+    - Backward compatible API changes only
+
+  business:
+    - GDPR compliant (user data privacy)
+    - Production-ready from day 1 (no shortcuts)
+    - Free tier compatible (Supabase free tier)
+    - Cost < $25/month for MVP (within free tier limits)
+    - Open source dependencies only (no proprietary libs)
+
+  performance:
+    - Page load < 2s (initial load)
+    - API response < 300ms (p95)
+    - Time to interactive < 3s
+    - Lighthouse score > 90 (performance)
+    - Bundle size < 150kb (initial JS)
+    - 99.9% uptime target
+
+quality_gates:
+  testing:
+    unit_coverage: 80
+    integration_coverage: 70
+    e2e_critical_paths: true
+    security_tests: true
+
+  code_quality:
+    typescript_strict: true
+    eslint_errors: 0
+    eslint_warnings: 0
+    prettier_formatted: true
+    no_console_logs: true
+
+  performance:
+    lighthouse_score: 90
+    bundle_size_kb: 150
+    time_to_interactive_ms: 3000
+    api_response_p95_ms: 300
+
+  security:
+    no_secrets_in_code: true
+    dependencies_up_to_date: true
+    security_headers_present: true
+    https_only: true
+    rate_limiting_enabled: true
+    password_strength_enforced: true
+    csrf_protection: true
+    xss_protection: true
+
+deployment:
+  platform: Vercel
+  database: Supabase
+  environment:
+    - development (local)
+    - staging (preview deployments)
+    - production (main branch)
+  ci_cd:
+    - Automated tests on PR
+    - Preview deployments
+    - Auto-deploy to production on merge
+
+tech_stack_rationale:
+  next_js: "React framework with built-in routing, SSR, and excellent DX"
+  typescript: "Type safety prevents runtime errors and improves code quality"
+  supabase: "Complete backend solution with built-in auth, reduces complexity"
+  tailwind: "Utility-first CSS for rapid UI development with consistency"
+  vercel: "Optimized for Next.js with edge functions and instant deployments"
+
+success_criteria:
+  - Users can sign up with email/password
+  - Users can log in with email/password
+  - Users can log in with Google OAuth
+  - Users can log in with GitHub OAuth
+  - Users can reset forgotten password
+  - Users can update their password when logged in
+  - Sessions persist across page reloads
+  - Protected routes redirect to login
+  - All tests passing (unit, integration, E2E)
+  - Lighthouse score > 90
+  - Security audit passed
+  - Accessibility audit passed (WCAG 2.1 AA)
+  - Production deployment successful
+  - Zero secrets in code
+  - Documentation complete

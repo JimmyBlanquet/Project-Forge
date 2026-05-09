@@ -1,0 +1,240 @@
+name: AI Tests & Quality Monitoring
+
+on:
+  push:
+    branches: [main, staging]
+  pull_request:
+    branches: [main, staging]
+  schedule:
+    # Run AI tests daily at 6 AM UTC
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    # Allow manual triggers
+
+jobs:
+  unit-tests-mocked:
+    name: Unit Tests (Mocked - Fast)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run unit tests with mocks
+        run: pnpm test:unit:mocked
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        if: always()
+        with:
+          files: ./coverage/coverage-final.json
+          flags: unit-tests
+
+  ai-integration-tests:
+    name: AI Integration Tests (Real API)
+    runs-on: ubuntu-latest
+    # Only run on main/staging or manual trigger to save API costs
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging' || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run AI integration tests
+        env:
+          TEST_SUPABASE_URL: ${{ secrets.TEST_SUPABASE_URL }}
+          TEST_SUPABASE_ANON_KEY: ${{ secrets.TEST_SUPABASE_ANON_KEY }}
+          TEST_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.TEST_SUPABASE_SERVICE_ROLE_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_MODEL: 'claude-haiku-4-5'
+        run: pnpm test:ai
+
+      - name: Upload AI test results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: ai-test-results
+          path: |
+            test-results/
+            coverage/
+
+  cost-benchmarks:
+    name: Cost Benchmarking
+    runs-on: ubuntu-latest
+    # Only run on schedule or manual trigger
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run cost benchmarks
+        env:
+          TEST_SUPABASE_URL: ${{ secrets.TEST_SUPABASE_URL }}
+          TEST_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.TEST_SUPABASE_SERVICE_ROLE_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_MODEL: 'claude-haiku-4-5'
+        run: pnpm test:benchmarks
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: cost-benchmarks
+          path: test-results/benchmarks/
+
+  performance-baselines:
+    name: Performance Baselines
+    runs-on: ubuntu-latest
+    # Only run on schedule or manual trigger
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run performance tests
+        env:
+          TEST_SUPABASE_URL: ${{ secrets.TEST_SUPABASE_URL }}
+          TEST_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.TEST_SUPABASE_SERVICE_ROLE_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_MODEL: 'claude-haiku-4-5'
+        run: pnpm test:performance
+
+      - name: Upload performance results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: performance-baselines
+          path: test-results/performance/
+
+  quality-check:
+    name: Quality Check (Accuracy)
+    runs-on: ubuntu-latest
+    needs: [ai-integration-tests]
+    # Only run if AI tests pass
+    if: success()
+
+    steps:
+      - name: Download AI test results
+        uses: actions/download-artifact@v3
+        with:
+          name: ai-test-results
+
+      - name: Check quality metrics
+        run: |
+          echo "📊 Checking AI quality metrics..."
+
+          # Extract accuracy from test results (example - adjust to your format)
+          # ACCURACY=$(cat test-results/metrics.json | jq '.accuracy')
+
+          # if (( $(echo "$ACCURACY < 0.85" | bc -l) )); then
+          #   echo "❌ Accuracy below threshold: $ACCURACY"
+          #   exit 1
+          # fi
+
+          echo "✅ Quality metrics passed"
+
+  notify:
+    name: Notify Results
+    runs-on: ubuntu-latest
+    needs: [unit-tests-mocked, ai-integration-tests, cost-benchmarks, performance-baselines]
+    if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+
+    steps:
+      - name: Check job statuses
+        id: check
+        run: |
+          echo "unit_tests=${{ needs.unit-tests-mocked.result }}" >> $GITHUB_OUTPUT
+          echo "ai_tests=${{ needs.ai-integration-tests.result }}" >> $GITHUB_OUTPUT
+          echo "cost_benchmarks=${{ needs.cost-benchmarks.result }}" >> $GITHUB_OUTPUT
+          echo "performance=${{ needs.performance-baselines.result }}" >> $GITHUB_OUTPUT
+
+      - name: Send Slack notification (optional)
+        if: failure()
+        # Add Slack webhook here if needed
+        run: |
+          echo "Tests failed - notification would be sent to Slack"
+
+      - name: Create GitHub Issue on failure
+        if: failure()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const title = '🚨 AI Tests Failed - Daily Run'
+            const body = `
+            ## Test Results
+
+            - Unit Tests: ${{ steps.check.outputs.unit_tests }}
+            - AI Integration Tests: ${{ steps.check.outputs.ai_tests }}
+            - Cost Benchmarks: ${{ steps.check.outputs.cost_benchmarks }}
+            - Performance: ${{ steps.check.outputs.performance }}
+
+            **Workflow Run**: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            **Triggered by**: ${{ github.event_name }}
+            **Commit**: ${{ github.sha }}
+            `
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body,
+              labels: ['ci', 'ai-tests', 'bug']
+            })

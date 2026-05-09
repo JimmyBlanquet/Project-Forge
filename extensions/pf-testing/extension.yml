@@ -1,0 +1,39 @@
+schema_version: "1.0"
+
+extension:
+  id: "pf-testing"
+  name: "Project-Forge Testing Suite"
+  version: "1.0.0"
+  description: "Acceptance testing, E2E browser testing, and spec-to-Playwright pipeline for spec-kit projects."
+  author: "Project-Forge"
+  repository: "https://github.com/JimmyBlanquet/project-forge"
+  license: "MIT"
+
+requires:
+  speckit_version: ">=0.3.2"
+
+provides:
+  commands:
+    - name: "speckit.pf-testing.recette"
+      file: "commands/recette.md"
+      description: "Generate acceptance testing checklist from spec.md"
+    - name: "speckit.pf-testing.e2e"
+      file: "commands/e2e.md"
+      description: "Run E2E browser tests with agent-browser"
+    - name: "speckit.pf-testing.test-bridge"
+      file: "commands/test-bridge.md"
+      description: "Convert spec acceptance scenarios to Playwright tests"
+  hooks:
+    - name: "pf-testing-suggest"
+      stage: "after_plan"
+      inline: |
+        echo ""
+        echo "Plan generated. Generate Playwright test specs from acceptance scenarios?"
+        echo "  Run: /speckit.pf.test-bridge"
+
+tags:
+  - "testing"
+  - "e2e"
+  - "playwright"
+  - "acceptance"
+  - "project-forge"

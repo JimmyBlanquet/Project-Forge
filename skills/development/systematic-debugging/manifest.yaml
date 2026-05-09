@@ -1,0 +1,50 @@
+name: systematic-debugging
+version: 1.0.0
+description: 4-phase systematic debugging approach for root cause analysis and minimal fixes
+tier: 2
+tags:
+  - debugging
+  - troubleshooting
+  - root-cause-analysis
+  - problem-solving
+  - best-practices
+
+source: Inspired by obra/superpowers systematic-debugging skill
+validated: false
+production_ready: false
+
+features:
+  - 4-phase systematic approach (Reproduce → Investigate → Fix → Verify)
+  - Minimal test case creation
+  - Root cause analysis through elimination
+  - Minimal fix strategy
+  - Regression prevention
+  - Evidence-based debugging
+
+dependencies:
+  required: []
+  optional:
+    - tdd-mode
+
+prerequisites:
+  - Bug report or issue description
+  - Access to codebase and logs
+  - Ability to reproduce issue
+
+usage_example: |
+  # Start systematic debugging
+  /systematic-debugging
+
+  # 4-phase workflow:
+  # 1. Reproduce: Create minimal test case
+  # 2. Investigate: Find root cause
+  # 3. Fix: Apply minimal change
+  # 4. Verify: Test + check for regressions
+
+quality_gates:
+  - Bug reproducible with minimal test case
+  - Root cause identified and documented
+  - Fix is minimal and targeted
+  - Tests pass after fix
+  - No regressions introduced
+  - Prevention strategy documented

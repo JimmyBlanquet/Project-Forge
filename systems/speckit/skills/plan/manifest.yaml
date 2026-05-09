@@ -1,0 +1,21 @@
+name: speckit-plan
+version: 1.0.0
+description: Generate technical architecture plan (tech stack, components, database schema)
+category: speckit
+author: Project-Forge Team
+
+command:
+  name: speckit-plan
+  description: Generate technical plan based on constitution and specification
+  arguments: []
+
+capabilities:
+  - filesystem_access
+  - file_creation
+  - file_reading
+
+tags:
+  - speckit
+  - architecture
+  - technical-plan
+  - design

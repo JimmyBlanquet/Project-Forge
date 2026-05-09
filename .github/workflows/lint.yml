@@ -1,0 +1,53 @@
+name: Lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  shellcheck:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run ShellCheck on framework scripts
+        uses: ludeeus/action-shellcheck@2.0.0
+        with:
+          scandir: './tools'
+          severity: warning
+          ignore_paths: 'starters'
+
+      - name: Run ShellCheck on tests
+        uses: ludeeus/action-shellcheck@2.0.0
+        with:
+          scandir: './tests'
+          severity: warning
+          ignore_paths: 'starters'
+
+  yaml-lint:
+    name: YAML lint (workflows + extensions)
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Lint YAML files
+        uses: ibiqlik/action-yamllint@v3
+        with:
+          file_or_dir: '.github/workflows extensions'
+          config_data: |
+            extends: relaxed
+            rules:
+              line-length: disable
+              truthy:
+                check-keys: false

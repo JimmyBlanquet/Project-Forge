@@ -1,0 +1,32 @@
+schema_version: "1.0"
+
+extension:
+  id: "pf-convert"
+  name: "Project-Forge Convert (Ralph++ Bridge)"
+  version: "1.0.0"
+  description: "Convert spec-kit tasks.md into a Ralph++ prd.json file for autonomous implementation. Groups tasks into atomic sub-stories with dependency ordering and quality gates."
+  author: "Project-Forge"
+  repository: "https://github.com/JimmyBlanquet/project-forge"
+  license: "MIT"
+
+requires:
+  speckit_version: ">=0.3.2"
+
+provides:
+  commands:
+    - name: "speckit.pf-convert.convert"
+      file: "commands/convert.md"
+      description: "Convert tasks.md to prd.json for Ralph++ autonomous implementation"
+  hooks:
+    - name: "pf-convert-suggest"
+      stage: "after_tasks"
+      inline: |
+        echo ""
+        echo "Tasks generated. Ready to convert to PRD for Ralph++?"
+        echo "  Run: /speckit.pf.convert"
+
+tags:
+  - "ralph++"
+  - "prd"
+  - "implementation"
+  - "project-forge"

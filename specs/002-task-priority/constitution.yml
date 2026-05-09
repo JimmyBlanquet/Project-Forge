@@ -1,0 +1,37 @@
+name: Task Priority System
+version: 1.0.0
+created: 2026-01-18
+
+principles:
+  architecture:
+    - Separation of concerns (database, types, services, UI)
+    - Type-safe data flow end-to-end
+    - Minimal API surface
+
+  security:
+    - Input validation at boundaries
+    - Type safety prevents runtime errors
+
+  quality:
+    - Test coverage: 80% minimum
+    - Zero TypeScript errors
+    - All UI changes verified in browser
+
+tech_stack:
+  language: TypeScript 5.3+
+  framework: Next.js 14 (App Router)
+  database: PostgreSQL (Supabase)
+  styling: Tailwind CSS
+  validation: Zod schemas
+
+quality_gates:
+  testing:
+    unit_coverage: 80
+    integration_required: true
+  code_quality:
+    typescript_strict: true
+    eslint_errors: 0
+    prettier_formatted: true
+  deployment:
+    build_succeeds: true
+    typecheck_passes: true

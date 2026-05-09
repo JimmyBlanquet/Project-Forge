@@ -1,0 +1,155 @@
+{
+  "project": "auth-system",
+  "branchName": "001-auth-system",
+  "description": "Production-ready user authentication system with email/password and social login support",
+  "userStories": [
+    {
+      "id": "US-001-1",
+      "parentStory": "US-001",
+      "title": "Signup Validation & Types",
+      "description": "Implement form validation for signup using zod schema",
+      "acceptanceCriteria": [
+        "Form validation schema created with zod",
+        "Email format validation works",
+        "Password strength validation enforced (min 8 chars, uppercase, lowercase, number, special char)",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": false,
+      "dependencies": [],
+      "filesAffected": ["lib/validations/auth.ts"],
+      "notes": "",
+      "taskIds": ["T012"]
+    },
+    {
+      "id": "US-001-2",
+      "parentStory": "US-001",
+      "title": "Signup Backend Logic",
+      "description": "Implement server-side signup handler using Supabase authentication",
+      "acceptanceCriteria": [
+        "Signup handler created using Supabase auth.signUp",
+        "User account created in database",
+        "Email verification sent",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "dependencies": ["US-001-1"],
+      "filesAffected": ["actions/auth.ts"],
+      "notes": "",
+      "taskIds": ["T011"]
+    },
+    {
+      "id": "US-001-3",
+      "parentStory": "US-001",
+      "title": "Signup UI Components",
+      "description": "Create signup page and form components with error handling and browser verification",
+      "acceptanceCriteria": [
+        "Signup page component created",
+        "Signup form renders with email/password fields",
+        "Error handling displays validation messages",
+        "Typecheck passes",
+        "Verify signup flow in browser using dev-browser skill"
+      ],
+      "priority": 3,
+      "passes": false,
+      "dependencies": ["US-001-2"],
+      "filesAffected": [
+        "app/signup/page.tsx",
+        "components/SignupForm.tsx"
+      ],
+      "notes": "",
+      "taskIds": ["T009", "T010", "T013", "T014"]
+    },
+    {
+      "id": "US-002-1",
+      "parentStory": "US-002",
+      "title": "Login Backend Logic",
+      "description": "Implement server-side login handler and session management",
+      "acceptanceCriteria": [
+        "Login handler created using Supabase auth.signInWithPassword",
+        "Session storage implemented",
+        "Authenticated session created on successful login",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "dependencies": ["US-001-3"],
+      "filesAffected": [
+        "actions/auth.ts",
+        "lib/session.ts"
+      ],
+      "notes": "",
+      "taskIds": ["T017", "T018"]
+    },
+    {
+      "id": "US-002-2",
+      "parentStory": "US-002",
+      "title": "Login UI Components",
+      "description": "Create login page and form components with browser verification",
+      "acceptanceCriteria": [
+        "Login page component created",
+        "Login form renders correctly",
+        "Form integrates with backend handler",
+        "Typecheck passes",
+        "Verify login flow in browser using dev-browser skill"
+      ],
+      "priority": 5,
+      "passes": false,
+      "dependencies": ["US-002-1"],
+      "filesAffected": [
+        "app/login/page.tsx",
+        "components/LoginForm.tsx"
+      ],
+      "notes": "",
+      "taskIds": ["T015", "T016", "T019"]
+    },
+    {
+      "id": "US-003-1",
+      "parentStory": "US-003",
+      "title": "Logout Backend Logic",
+      "description": "Implement server-side logout handler using Supabase",
+      "acceptanceCriteria": [
+        "Logout handler created using Supabase auth.signOut",
+        "Session cleared on logout",
+        "Typecheck passes"
+      ],
+      "priority": 6,
+      "passes": false,
+      "dependencies": ["US-002-2"],
+      "filesAffected": ["actions/auth.ts"],
+      "notes": "",
+      "taskIds": ["T021"]
+    },
+    {
+      "id": "US-003-2",
+      "parentStory": "US-003",
+      "title": "Logout UI Components",
+      "description": "Create logout button and integrate into navigation with browser verification",
+      "acceptanceCriteria": [
+        "Logout button component created",
+        "Logout added to navigation",
+        "Typecheck passes",
+        "Verify logout clears session in browser using dev-browser skill"
+      ],
+      "priority": 7,
+      "passes": false,
+      "dependencies": ["US-003-1"],
+      "filesAffected": [
+        "components/LogoutButton.tsx",
+        "components/Nav.tsx"
+      ],
+      "notes": "",
+      "taskIds": ["T020", "T022", "T023"]
+    }
+  ],
+  "metadata": {
+    "createdAt": "2026-01-18T14:55:00.000Z",
+    "source": "speckit",
+    "specPath": "specs/001-auth-system/spec.md",
+    "planPath": "specs/001-auth-system/plan.md",
+    "tasksPath": "specs/001-auth-system/tasks.md",
+    "totalSubStories": 7,
+    "estimatedHours": 12
+  }
+}
