@@ -96,6 +96,42 @@ Key directories:
 
 Significant changes should be documented as ADRs in `docs/adr/`. Use the existing ADRs as templates. Number sequentially.
 
+## Security: avoiding sensitive references
+
+Project-Forge is intentionally **harness-pure**: zero hardcoded credentials, zero private endpoints, zero organization-specific configs. Anything that looks like a secret, a private IP, or an internal endpoint must live in environment variables or be configured at deployment time.
+
+A CI check enforces this on every PR and push to main:
+
+```bash
+# Run locally before committing
+bash scripts/check-no-internal-refs.sh
+```
+
+The scanner detects:
+- API keys in clear (OpenAI `sk-*`, Anthropic `sk-ant-*`, Google `AIza*`, AWS `AKIA*`, GitHub `ghp_*`, Slack `xoxb-*`)
+- Private IPs (RFC 1918 + Tailscale CGNAT 100.64-127.x.x.x)
+- Credentials inline in URLs (`https://user:pass@`)
+- Tracked `.env` files (should be gitignored, except `.env.example`)
+- Custom project patterns from `.security-patterns` (one regex per line)
+
+If you intentionally need to commit something the scanner flags (rare — usually example/doc):
+- Add the path glob to `.security-allowlist` (one per line)
+- Or use `.env.example` instead of `.env` for templates
+
+The scanner has 3 modes:
+```bash
+bash scripts/check-no-internal-refs.sh           # all tracked files
+bash scripts/check-no-internal-refs.sh --staged  # only git-staged files (use as pre-commit)
+bash scripts/check-no-internal-refs.sh --since main  # only files changed since main
+```
+
+To wire as a local pre-commit hook (optional):
+```bash
+echo '#!/bin/bash
+exec bash scripts/check-no-internal-refs.sh --staged' > .git/hooks/pre-commit
+chmod +x .git/hooks/pre-commit
+```
+
 ## Releasing
 
 Releases are tagged on `main` after manual smoke testing. Currently maintained by repo owner — community release proposals welcome via issues.
